@@ -9,8 +9,8 @@ import (
 	"golang.org/x/time/rate"
 )
 
-// RateLimiter 支持 IP 和全局限流
-type RateLimiter struct {
+// 支持 IP 和全局限流
+type Builder struct {
 	// IP 限流
 	ipEnabled  bool
 	ipMax      int
@@ -38,8 +38,8 @@ type client struct {
 	lastSeen time.Time
 }
 
-func NewRateLimiter() *RateLimiter {
-	return &RateLimiter{
+func New() *Builder {
+	return &Builder{
 		clients: make(map[string]*client),
 		// 默认错误处理
 		IPErrorHandler: func(c *gin.Context) {
@@ -53,7 +53,7 @@ func NewRateLimiter() *RateLimiter {
 	}
 }
 
-func (rl *RateLimiter) WithIPLimit(max int, interval time.Duration) *RateLimiter {
+func (rl *Builder) WithIPLimit(max int, interval time.Duration) *Builder {
 	if max > 0 {
 		rl.ipEnabled = true
 		rl.ipMax = max
@@ -62,7 +62,7 @@ func (rl *RateLimiter) WithIPLimit(max int, interval time.Duration) *RateLimiter
 	return rl
 }
 
-func (rl *RateLimiter) WithGlobalLimit(max int, interval time.Duration) *RateLimiter {
+func (rl *Builder) WithGlobalLimit(max int, interval time.Duration) *Builder {
 	if max > 0 {
 		rl.globalEnabled = true
 		rl.globalMax = max
@@ -73,7 +73,7 @@ func (rl *RateLimiter) WithGlobalLimit(max int, interval time.Duration) *RateLim
 }
 
 // 设置自定义 IP 错误处理
-func (rl *RateLimiter) WithIPErrorHandler(fn func(c *gin.Context)) *RateLimiter {
+func (rl *Builder) WithIPErrorHandler(fn func(c *gin.Context)) *Builder {
 	if fn != nil {
 		rl.IPErrorHandler = fn
 	}
@@ -81,14 +81,14 @@ func (rl *RateLimiter) WithIPErrorHandler(fn func(c *gin.Context)) *RateLimiter 
 }
 
 // 设置自定义全局错误处理
-func (rl *RateLimiter) WithGlobalErrorHandler(fn func(c *gin.Context)) *RateLimiter {
+func (rl *Builder) WithGlobalErrorHandler(fn func(c *gin.Context)) *Builder {
 	if fn != nil {
 		rl.GlobalErrorHandler = fn
 	}
 	return rl
 }
 
-func (rl *RateLimiter) WithCleanup(interval time.Duration) *RateLimiter {
+func (rl *Builder) WithCleanup(interval time.Duration) *Builder {
 	if interval > 0 {
 		rl.cleanupInterval = interval
 	}
@@ -96,7 +96,7 @@ func (rl *RateLimiter) WithCleanup(interval time.Duration) *RateLimiter {
 }
 
 // Middleware 返回 gin.HandlerFunc
-func (rl *RateLimiter) Middleware() gin.HandlerFunc {
+func (rl *Builder) Middleware() gin.HandlerFunc {
 	if rl.ipEnabled && rl.cleanupInterval > 0 {
 		go rl.cleanupClients()
 	}
@@ -135,7 +135,7 @@ func (rl *RateLimiter) Middleware() gin.HandlerFunc {
 }
 
 // 清理长时间未访问的 IP
-func (rl *RateLimiter) cleanupClients() {
+func (rl *Builder) cleanupClients() {
 	interval := rl.cleanupInterval
 	if interval <= 0 {
 		interval = time.Minute

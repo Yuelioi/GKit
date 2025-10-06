@@ -8,25 +8,32 @@ import (
 	"github.com/rs/zerolog"
 )
 
-type GinLoggerBuilder struct {
+type Builder struct {
 	logger      zerolog.Logger
 	ignorePaths map[string]struct{}
 }
 
-func NewGinLoggerBuilder(logger zerolog.Logger) *GinLoggerBuilder {
-	return &GinLoggerBuilder{
+func NewBuilder(logger zerolog.Logger) *Builder {
+	return &Builder{
 		logger:      logger,
 		ignorePaths: make(map[string]struct{}),
 	}
 }
 
-// 添加要忽略的路径
-func (b *GinLoggerBuilder) IgnorePath(path string) *GinLoggerBuilder {
+func Default(logger zerolog.Logger) gin.HandlerFunc {
+	return NewBuilder(logger).
+		WithIgnorePath("/health").
+		Handler()
+}
+
+// 忽略特定路径
+func (b *Builder) WithIgnorePath(path string) *Builder {
 	b.ignorePaths[path] = struct{}{}
 	return b
 }
 
-func (b *GinLoggerBuilder) Build() gin.HandlerFunc {
+// 构建 Gin 中间件
+func (b *Builder) Handler() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
 		path := c.Request.URL.Path
