@@ -38,7 +38,16 @@ type client struct {
 	lastSeen time.Time
 }
 
-func New() *Builder {
+// 默认限流：全局 100 次/秒，每个 IP 10 次/秒
+func Default() gin.HandlerFunc {
+	return NewBuilder().
+		WithGlobalLimit(100, time.Second).
+		WithIPLimit(10, time.Second).
+		WithCleanup(1 * time.Minute).
+		Middleware()
+}
+
+func NewBuilder() *Builder {
 	return &Builder{
 		clients: make(map[string]*client),
 		// 默认错误处理
