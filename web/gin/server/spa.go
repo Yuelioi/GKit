@@ -44,6 +44,9 @@ func Start(cfg ServerConfig, registerRoutes func(api *gin.RouterGroup)) error {
 
 	// 静态资源 + SPA
 	if cfg.SPAPath != "" {
+		r.Use(func(c *gin.Context) {
+			http.ServeFile(c.Writer, c.Request, cfg.SPAPath+c.Request.URL.Path)
+		})
 		r.NoRoute(func(c *gin.Context) {
 			path := c.Request.URL.Path
 			if len(path) >= 4 && path[:4] == "/api" {
@@ -52,9 +55,7 @@ func Start(cfg ServerConfig, registerRoutes func(api *gin.RouterGroup)) error {
 			}
 			c.File(cfg.SPAPath + "/index.html")
 		})
-		r.Use(func(c *gin.Context) {
-			http.ServeFile(c.Writer, c.Request, cfg.SPAPath+c.Request.URL.Path)
-		})
+
 	}
 
 	cfg.Logger.Info().Str("addr", cfg.Addr).Msg("服务启动")
