@@ -4,6 +4,7 @@ go 1.25.0
 
 require (
 	github.com/gin-contrib/cors v1.7.6
+	github.com/gin-contrib/static v1.1.5
 	github.com/gin-gonic/gin v1.11.0
 	github.com/rs/zerolog v1.34.0
 	golang.org/x/time v0.13.0

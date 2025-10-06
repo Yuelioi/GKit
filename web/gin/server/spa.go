@@ -1,9 +1,8 @@
 package server
 
 import (
-	"net/http"
-
 	"github.com/gin-contrib/cors"
+	"github.com/gin-contrib/static"
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog"
 )
@@ -44,18 +43,7 @@ func Start(cfg ServerConfig, registerRoutes func(api *gin.RouterGroup)) error {
 
 	// 静态资源 + SPA
 	if cfg.SPAPath != "" {
-		r.Use(func(c *gin.Context) {
-			http.ServeFile(c.Writer, c.Request, cfg.SPAPath+c.Request.URL.Path)
-		})
-		r.NoRoute(func(c *gin.Context) {
-			path := c.Request.URL.Path
-			if len(path) >= 4 && path[:4] == "/api" {
-				c.JSON(http.StatusNotFound, gin.H{"error": "API 路由未找到"})
-				return
-			}
-			c.File(cfg.SPAPath + "/index.html")
-		})
-
+		r.Use(static.Serve("/", static.LocalFile(cfg.SPAPath, true)))
 	}
 
 	cfg.Logger.Info().Str("addr", cfg.Addr).Msg("服务启动")
