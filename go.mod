@@ -1,4 +1,4 @@
-module gkit
+module github.com/Yuelioi/gkit
 
 go 1.25.0
 
