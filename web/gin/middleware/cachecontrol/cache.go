@@ -15,7 +15,14 @@ type CacheBuilder struct {
 	immutable bool
 }
 
-// NewBuilder 初始化默认 builder
+// Default：默认 5 分钟公共缓存
+func Default() gin.HandlerFunc {
+	return NewBuilder().
+		WithMaxAge(5 * time.Minute).
+		Build()
+}
+
+// 初始化默认 builder
 func NewBuilder() *CacheBuilder {
 	return &CacheBuilder{}
 }
@@ -69,11 +76,4 @@ func (b *CacheBuilder) Build() gin.HandlerFunc {
 		c.Header("Cache-Control", strings.Join(directives, ", "))
 		c.Next()
 	}
-}
-
-// Default：默认 5 分钟公共缓存
-func Default() gin.HandlerFunc {
-	return NewBuilder().
-		WithMaxAge(5 * time.Minute).
-		Build()
 }
