@@ -8,50 +8,90 @@ import (
 	"github.com/rs/zerolog"
 )
 
-type LogConfig struct {
-	Level      zerolog.Level
-	NoColor    bool
-	WithCaller bool
-	Output     *os.File
+type LoggerBuilder struct {
+	level      zerolog.Level
+	withCaller bool
+	noColor    bool
+	output     *os.File
 }
 
-func New(cfg LogConfig) zerolog.Logger {
-	if cfg.Output == nil {
-		cfg.Output = os.Stdout
-	}
+func New() zerolog.Logger {
+	return NewBuilder().
+		Level(zerolog.InfoLevel). // 默认 Info
+		Output(os.Stdout).        // 默认终端
+		Build()
+}
 
-	cw := zerolog.ConsoleWriter{
-		Out:        cfg.Output,
-		TimeFormat: "2006-01-02 15:04:05",
-		NoColor:    cfg.NoColor,
+// 初始化 builder
+func NewBuilder() *LoggerBuilder {
+	return &LoggerBuilder{
+		level:  zerolog.InfoLevel,
+		output: os.Stdout,
 	}
+}
 
-	colors := map[string]string{
-		"debug": "\x1b[35mDEBG\x1b[0m",
-		"info":  "\x1b[32mINFO\x1b[0m",
-		"warn":  "\x1b[33mWARN\x1b[0m",
-		"error": "\x1b[31mERRO\x1b[0m",
-		"fatal": "\x1b[31mFATL\x1b[0m",
-		"panic": "\x1b[31mPANC\x1b[0m",
-	}
+func (b *LoggerBuilder) Level(l zerolog.Level) *LoggerBuilder {
+	b.level = l
+	return b
+}
 
-	cw.FormatLevel = func(i interface{}) string {
-		if ll, ok := i.(string); ok {
-			if color, found := colors[ll]; found {
-				return fmt.Sprintf("[%s]", color)
-			}
-			return fmt.Sprintf("[%s]", strings.ToUpper(ll))
+func (b *LoggerBuilder) WithCaller() *LoggerBuilder {
+	b.withCaller = true
+	return b
+}
+
+func (b *LoggerBuilder) NoColor() *LoggerBuilder {
+	b.noColor = true
+	return b
+}
+
+func (b *LoggerBuilder) Output(f *os.File) *LoggerBuilder {
+	b.output = f
+	return b
+}
+
+func (b *LoggerBuilder) Build() zerolog.Logger {
+	var logger zerolog.Logger
+
+	isConsole := b.output == os.Stdout || b.output == os.Stderr
+
+	if isConsole {
+		// 终端输出，带颜色
+		cw := zerolog.ConsoleWriter{
+			Out:        b.output,
+			TimeFormat: "2006-01-02 15:04:05",
+			NoColor:    b.noColor,
 		}
-		return fmt.Sprintf("[%s]", i)
-	}
-	cw.FormatFieldName = func(i interface{}) string { return fmt.Sprintf("%s=", i) }
-	cw.FormatFieldValue = func(i interface{}) string { return fmt.Sprintf("%s", i) }
 
-	logger := zerolog.New(cw).With().Timestamp().Logger()
-	if cfg.WithCaller {
+		colors := map[string]string{
+			"debug": "\x1b[35mDEBG\x1b[0m",
+			"info":  "\x1b[32mINFO\x1b[0m",
+			"warn":  "\x1b[33mWARN\x1b[0m",
+			"error": "\x1b[31mERRO\x1b[0m",
+			"fatal": "\x1b[31mFATL\x1b[0m",
+			"panic": "\x1b[31mPANC\x1b[0m",
+		}
+
+		cw.FormatLevel = func(i interface{}) string {
+			if ll, ok := i.(string); ok {
+				if color, found := colors[ll]; found {
+					return fmt.Sprintf("[%s]", color)
+				}
+				return fmt.Sprintf("[%s]", strings.ToUpper(ll))
+			}
+			return fmt.Sprintf("[%s]", i)
+		}
+
+		logger = zerolog.New(cw).With().Timestamp().Logger()
+	} else {
+		// 文件或其他 io.Writer，使用 JSON 格式
+		logger = zerolog.New(b.output).With().Timestamp().Logger()
+	}
+
+	if b.withCaller {
 		logger = logger.With().Caller().Logger()
 	}
-	zerolog.SetGlobalLevel(cfg.Level)
 
+	logger = logger.Level(b.level)
 	return logger
 }

@@ -1,25 +1,41 @@
 package zero
 
 import (
+	"os"
 	"testing"
 
 	"github.com/rs/zerolog"
 )
 
 func TestLoggerNew(t *testing.T) {
+	logger := NewBuilder().
+		Level(zerolog.DebugLevel).
+		WithCaller().
+		Output(os.Stdout).
+		Build()
 
-	log := New(LogConfig{Level: zerolog.DebugLevel, WithCaller: false})
-	log.Info().Str("module", "core").Msg("Logger initialized")
-	log.Warn().Msg("This is a warning")
+	logger.Info().Str("module", "core").Msg("Logger initialized")
+	logger.Warn().Msg("This is a warning")
 
-	log2 := New(LogConfig{Level: zerolog.DebugLevel, WithCaller: false})
-	log2.Info().Str("module", "core").Msg("Logger initialized")
+	f, err := os.OpenFile("app.log", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
 
-	// log.Panic().Msg("This is a panic")
+	logger = NewBuilder().
+		Level(zerolog.InfoLevel).
+		WithCaller().
+		Output(f).
+		Build()
 
-	// Output:
-	// 2025-10-06 18:53:13 [INFO] example_test.go:8 > Logger initialized module=core
-	// 2025-10-06 18:53:13 [WARN] example_test.go:9 > This is a warning
+	logger.Info().
+		Str("module", "core").
+		Msg("Logger initialized")
+
+	logger.Warn().
+		Str("module", "core").
+		Msg("This is a warning")
 
 	t.Log("✅ Logger initialization")
 
