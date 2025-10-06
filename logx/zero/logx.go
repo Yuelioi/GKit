@@ -15,7 +15,7 @@ type LoggerBuilder struct {
 	output     *os.File
 }
 
-func New() zerolog.Logger {
+func Default() zerolog.Logger {
 	return NewBuilder().
 		Level(zerolog.InfoLevel). // 默认 Info
 		Output(os.Stdout).        // 默认终端
