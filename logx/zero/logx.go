@@ -17,8 +17,8 @@ type LoggerBuilder struct {
 
 func Default() zerolog.Logger {
 	return NewBuilder().
-		Level(zerolog.InfoLevel). // 默认 Info
-		Output(os.Stdout).        // 默认终端
+		Level(zerolog.DebugLevel). // 默认 Debug
+		Output(os.Stdout).         // 默认终端
 		Build()
 }
 
