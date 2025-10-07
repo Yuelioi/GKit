@@ -26,6 +26,7 @@ type ServerConfig struct {
 func Start(cfg ServerConfig, registerRoutes func(api *gin.RouterGroup)) error {
 	if cfg.Mode == "release" {
 		gin.SetMode(gin.ReleaseMode)
+		zerolog.SetGlobalLevel(zerolog.InfoLevel)
 	} else {
 		// 开发模式，支持跨域
 		if cfg.EnableCORS {
@@ -35,6 +36,8 @@ func Start(cfg ServerConfig, registerRoutes func(api *gin.RouterGroup)) error {
 		if len(cfg.Addr) > 0 && cfg.Addr[0] == ':' {
 			cfg.Addr = "0.0.0.0" + cfg.Addr
 		}
+		zerolog.SetGlobalLevel(zerolog.DebugLevel)
+		gin.SetMode(gin.DebugMode)
 	}
 
 	r := gin.New()
