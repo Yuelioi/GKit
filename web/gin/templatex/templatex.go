@@ -4,6 +4,7 @@ import (
 	"embed"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"text/template"
 
@@ -45,7 +46,7 @@ func WithCustomTemplates(path string) GeneratorOption {
 func (g *Generator) getTemplateStr(tplPath string) (string, error) {
 	if g.useEmbed {
 		// 使用内嵌模板
-		data, err := defaultTemplatesFS.ReadFile(filepath.Join("templates", tplPath))
+		data, err := defaultTemplatesFS.ReadFile(path.Join("templates", tplPath))
 		if err != nil {
 			return "", err
 		}
