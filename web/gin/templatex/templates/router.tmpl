@@ -8,7 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func Setup{{.Name}}Routes(r *gin.Engine, s {{.Config.Output.Structure.Service}}.{{.Name}}Service) {
+func Setup{{.Name}}Routes(r *gin.Engine, s {{.Config.Output.Structure.service}}.{{.Name}}Service) {
 	handler := {{.Config.Output.Structure.handler}}.New{{.Name}}Handler(s)
 	
 	{{.LowerName}}Group := r.Group("{{.Config.API.Prefix}}/{{if .Config.API.Group}}{{.Config.API.Group}}/{{end}}{{.LowerName}}s")
