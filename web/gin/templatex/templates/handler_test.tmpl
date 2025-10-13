@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"{{.Config.Model.Package}}/models"
+  {{if .Config.Features.DTO}}"{{.Config.Output.BasePackage}}/{{.Config.Output.Structure.DTO}}"{{end}}
+
 	"{{.Config.Output.BasePackage}}/{{.Config.Output.Structure.handler}}"
 	{{if .Config.Features.Service}}"{{.Config.Output.BasePackage}}/{{.Config.Output.Structure.service}}"{{end}}
 	"github.com/gin-gonic/gin"
