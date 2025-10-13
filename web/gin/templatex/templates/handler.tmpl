@@ -1,0 +1,212 @@
+package {{.Config.Output.Structure.handler}}
+
+import (
+	"net/http"
+	"{{.Config.Model.Package}}/models"
+	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
+	{{if .Config.Features.Validation}}"github.com/go-playground/validator/v10"{{end}}
+)
+
+type {{.Name}}Handler struct {
+	db *gorm.DB
+	{{if .Config.Features.Validation}}validate *validator.Validate{{end}}
+}
+
+func New{{.Name}}Handler(db *gorm.DB) *{{.Name}}Handler {
+	return &{{.Name}}Handler{
+		db: db,
+		{{if .Config.Features.Validation}}validate: validator.New(),{{end}}
+	}
+}
+
+{{if index .Config.API.Methods "create"}}
+// Create{{.Name}} 创建{{.Name}}
+func (h *{{.Name}}Handler) Create{{.Name}}(c *gin.Context) {
+	var {{.LowerName}} models.{{.Name}}
+	if err := c.ShouldBindJSON(&{{.LowerName}}); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	{{if .Config.Features.Validation}}
+	if err := h.validate.Struct({{.LowerName}}); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	{{end}}
+
+	if err := h.db.Create(&{{.LowerName}}).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{
+		"code": 0,
+		"message": "success",
+		"data": {{.LowerName}},
+	})
+}
+{{end}}
+
+{{if index .Config.API.Methods "get"}}
+// Get{{.Name}} 获取单个{{.Name}}
+func (h *{{.Name}}Handler) Get{{.Name}}(c *gin.Context) {
+	id := c.Param("id")
+	var {{.LowerName}} models.{{.Name}}
+
+	{{if .Config.Model.SoftDelete}}
+	if err := h.db.First(&{{.LowerName}}, id).Error; err != nil {
+	{{else}}
+	if err := h.db.Unscoped().First(&{{.LowerName}}, id).Error; err != nil {
+	{{end}}
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"error": "{{.Name}} not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code": 0,
+		"message": "success",
+		"data": {{.LowerName}},
+	})
+}
+{{end}}
+
+{{if index .Config.API.Methods "list"}}
+// List{{.PluralName}} 获取{{.Name}}列表
+func (h *{{.Name}}Handler) List{{.PluralName}}(c *gin.Context) {
+	var {{.LowerName}}s []models.{{.Name}}
+	
+	{{if .Config.Pagination.Enabled}}
+	page := c.DefaultQuery("page", "{{.Config.Pagination.DefaultPage}}")
+	pageSize := c.DefaultQuery("page_size", "{{.Config.Pagination.DefaultSize}}")
+	
+	pageSizeInt := atoi(pageSize)
+	if pageSizeInt > {{.Config.Pagination.MaxSize}} {
+		pageSizeInt = {{.Config.Pagination.MaxSize}}
+	}
+	{{end}}
+
+	query := h.db.Model(&models.{{.Name}}{})
+
+	{{if .Config.Features.Search}}
+	// 搜索功能
+	if search := c.Query("search"); search != "" {
+		{{range $index, $field := .Fields}}
+		{{if $field.Searchable}}
+		{{if eq $index 0}}query = query.Where("{{$field.JsonTag}} LIKE ?", "%"+search+"%")
+		{{else}}query = query.Or("{{$field.JsonTag}} LIKE ?", "%"+search+"%")
+		{{end}}
+		{{end}}
+		{{end}}
+	}
+	{{end}}
+
+	{{if .Config.Features.Sort}}
+	// 排序功能
+	if sort := c.DefaultQuery("sort", "id"); sort != "" {
+		order := c.DefaultQuery("order", "desc")
+		query = query.Order(sort + " " + order)
+	}
+	{{end}}
+
+	var total int64
+	query.Count(&total)
+
+	{{if .Config.Pagination.Enabled}}
+	if err := query.Offset((atoi(page) - 1) * pageSizeInt).
+		Limit(pageSizeInt).
+		Find(&{{.LowerName}}s).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code": 0,
+		"message": "success",
+		"data":  {{.LowerName}}s,
+		"total": total,
+		"page":  atoi(page),
+		"page_size": pageSizeInt,
+	})
+	{{else}}
+	if err := query.Find(&{{.LowerName}}s).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code": 0,
+		"message": "success",
+		"data":  {{.LowerName}}s,
+		"total": total,
+	})
+	{{end}}
+}
+{{end}}
+
+{{if index .Config.API.Methods "update"}}
+// Update{{.Name}} 更新{{.Name}}
+func (h *{{.Name}}Handler) Update{{.Name}}(c *gin.Context) {
+	id := c.Param("id")
+	var {{.LowerName}} models.{{.Name}}
+
+	if err := h.db.First(&{{.LowerName}}, id).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"error": "{{.Name}} not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := c.ShouldBindJSON(&{{.LowerName}}); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	{{if .Config.Features.Validation}}
+	if err := h.validate.Struct({{.LowerName}}); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	{{end}}
+
+	if err := h.db.Save(&{{.LowerName}}).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code": 0,
+		"message": "success",
+		"data": {{.LowerName}},
+	})
+}
+{{end}}
+
+{{if index .Config.API.Methods "delete"}}
+// Delete{{.Name}} 删除{{.Name}}
+func (h *{{.Name}}Handler) Delete{{.Name}}(c *gin.Context) {
+	id := c.Param("id")
+	
+	{{if .Config.Model.SoftDelete}}
+	if err := h.db.Delete(&models.{{.Name}}{}, id).Error; err != nil {
+	{{else}}
+	if err := h.db.Unscoped().Delete(&models.{{.Name}}{}, id).Error; err != nil {
+	{{end}}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code": 0,
+		"message": "{{.Name}} deleted successfully",
+	})
+}
+{{end}}
+

@@ -1,0 +1,54 @@
+# Gin CRUD Generator 配置文件
+
+model:
+  file: "./models/user.go"     # 模型文件路径
+  package: "your-project"       # 项目包名
+  soft_delete: false            # 启用软删除
+  # include:                    # 只生成指定模型
+  #   - User
+  #   - Product
+  # exclude:                    # 排除指定模型
+  #   - TempModel
+
+api:
+  prefix: "/api/v1"             # API 路径前缀
+  group: ""                     # 路由组名(可选)
+  methods:                      # 启用的方法
+    create: true
+    get: true
+    list: true
+    update: true
+    delete: true
+  # middleware:                 # 中间件(可选)
+  #   - middleware.Auth()
+  #   - middleware.Logger()
+
+database:
+  type: "mysql"                 # 数据库类型: mysql, postgres, sqlite
+  time_fields: true             # 自动处理时间字段
+
+pagination:
+  enabled: true
+  default_page: 1
+  default_size: 10
+  max_size: 100
+  style: "offset"               # offset 或 cursor
+
+output:
+  dir: "internal"              # 输出目录
+  overwrite: false              # 是否覆盖已存在文件
+  structure:
+    handler: "handlers"
+    route: "routes"
+    service: "services"
+
+features:
+  validation: true              # 启用请求验证
+  cache: false                  # 启用缓存(待实现)
+  search: true                  # 启用搜索功能
+  search_fields:                # 可搜索的字段
+    - name
+    - email
+  sort: true                    # 启用排序
+  filter: false                 # 启用过滤(待实现)
+  export: false                 # 启用导出(待实现)

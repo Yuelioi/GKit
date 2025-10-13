@@ -36,7 +36,6 @@ func Start(cfg ServerConfig, registerRoutes func(api *gin.RouterGroup)) error {
 		if len(cfg.Addr) > 0 && cfg.Addr[0] == ':' {
 			cfg.Addr = "0.0.0.0" + cfg.Addr
 		}
-		zerolog.SetGlobalLevel(zerolog.DebugLevel)
 		gin.SetMode(gin.DebugMode)
 	}
 

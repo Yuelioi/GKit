@@ -1,0 +1,27 @@
+package {{.Config.Output.Structure.route}}
+
+import (
+	"{{.Config.Model.Package}}/{{.Config.Output.Structure.handler}}"
+	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
+)
+
+func Setup{{.Name}}Routes(r *gin.Engine, db *gorm.DB) {
+	handler := {{.Config.Output.Structure.handler}}.New{{.Name}}Handler(db)
+	
+	{{.LowerName}}Group := r.Group("{{.Config.API.Prefix}}/{{if .Config.API.Group}}{{.Config.API.Group}}/{{end}}{{.LowerName}}s")
+	{{if .Config.API.Middleware}}
+	{{.LowerName}}Group.Use(
+		{{range .Config.API.Middleware}}
+		{{.}},
+		{{end}}
+	)
+	{{end}}
+	{
+		{{if index .Config.API.Methods "create"}}{{.LowerName}}Group.POST("", handler.Create{{.Name}}){{end}}
+		{{if index .Config.API.Methods "get"}}{{.LowerName}}Group.GET("/:id", handler.Get{{.Name}}){{end}}
+		{{if index .Config.API.Methods "list"}}{{.LowerName}}Group.GET("", handler.List{{.PluralName}}){{end}}
+		{{if index .Config.API.Methods "update"}}{{.LowerName}}Group.PUT("/:id", handler.Update{{.Name}}){{end}}
+		{{if index .Config.API.Methods "delete"}}{{.LowerName}}Group.DELETE("/:id", handler.Delete{{.Name}}){{end}}
+	}
+}
