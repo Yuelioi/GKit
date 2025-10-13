@@ -1,0 +1,311 @@
+package {{.Config.Output.Structure.service}}
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	{{if .Config.Features.Logging.Enabled}}"log"{{end}}
+	{{if .Config.Features.Cache.Enabled}}"time"{{end}}
+
+	"{{.Config.Model.Package}}/models"
+	{{if .Config.Features.Repository}}"{{.Config.Model.Package}}/{{.Config.Output.Structure.repository}}"{{end}}
+	{{if .Config.Features.DTO}}"{{.Config.Model.Package}}/{{.Config.Output.Structure.dto}}"{{end}}
+	{{if .Config.Features.Cache.Enabled}}"github.com/patrickmn/go-cache"{{end}}
+	"gorm.io/gorm"
+)
+
+var (
+	Err{{.Name}}NotFound = errors.New("{{.LowerName}} not found")
+	Err{{.Name}}Exists   = errors.New("{{.LowerName}} already exists")
+)
+
+type {{.Name}}Service interface {
+	Create(ctx context.Context, {{if .Config.Features.DTO}}req *dto.Create{{.Name}}Request{{else}}{{.LowerName}} *models.{{.Name}}{{end}}) (*models.{{.Name}}, error)
+	GetByID(ctx context.Context, id uint) (*models.{{.Name}}, error)
+	List(ctx context.Context, {{if .Config.Features.DTO}}req *dto.List{{.Name}}Request{{else}}page, pageSize int{{end}}) ([]*models.{{.Name}}, int64, error)
+	Update(ctx context.Context, id uint, {{if .Config.Features.DTO}}req *dto.Update{{.Name}}Request{{else}}{{.LowerName}} *models.{{.Name}}{{end}}) (*models.{{.Name}}, error)
+	Delete(ctx context.Context, id uint) error
+	{{if .Config.Features.Batch}}
+	BatchCreate(ctx context.Context, {{.LowerName}}s []*models.{{.Name}}) error
+	BatchDelete(ctx context.Context, ids []uint) error
+	{{end}}
+	{{if .Config.Features.Export.Enabled}}
+	Export(ctx context.Context, format string) ([]byte, error)
+	{{end}}
+}
+
+type {{.LowerName}}Service struct {
+	{{if .Config.Features.Repository}}
+	repo repository.{{.Name}}Repository
+	{{else}}
+	db *gorm.DB
+	{{end}}
+	{{if .Config.Features.Cache.Enabled}}
+	cache *cache.Cache
+	{{end}}
+}
+
+{{if .Config.Features.Repository}}
+func New{{.Name}}Service(repo repository.{{.Name}}Repository{{if .Config.Features.Cache.Enabled}}, cache *cache.Cache{{end}}) {{.Name}}Service {
+{{else}}
+func New{{.Name}}Service(db *gorm.DB{{if .Config.Features.Cache.Enabled}}, cache *cache.Cache{{end}}) {{.Name}}Service {
+{{end}}
+	return &{{.LowerName}}Service{
+		{{if .Config.Features.Repository}}repo: repo,{{else}}db: db,{{end}}
+		{{if .Config.Features.Cache.Enabled}}cache: cache,{{end}}
+	}
+}
+
+func (s *{{.LowerName}}Service) Create(ctx context.Context, {{if .Config.Features.DTO}}req *dto.Create{{.Name}}Request{{else}}{{.LowerName}} *models.{{.Name}}{{end}}) (*models.{{.Name}}, error) {
+	{{if .Config.Features.Logging.Enabled}}
+	log.Printf("[Service] Creating {{.LowerName}}")
+	{{end}}
+
+	{{if .Config.Features.DTO}}
+	{{.LowerName}} := &models.{{.Name}}{
+		// Map DTO fields to model
+		{{range .Fields}}
+		{{if not .IsID}}{{.Name}}: req.{{.Name}},{{end}}
+		{{end}}
+	}
+	{{end}}
+
+	{{if .Config.Features.Repository}}
+	if err := s.repo.Create(ctx, {{.LowerName}}); err != nil {
+	{{else}}
+	if err := s.db.WithContext(ctx).Create({{.LowerName}}).Error; err != nil {
+	{{end}}
+		{{if .Config.Features.Logging.Enabled}}
+		log.Printf("[Service] Failed to create {{.LowerName}}: %v", err)
+		{{end}}
+		return nil, err
+	}
+
+	{{if .Config.Features.Cache.Enabled}}
+	// Invalidate list cache
+	s.cache.Delete("{{.LowerName}}:list")
+	{{end}}
+
+	{{if .Config.Features.Logging.Enabled}}
+	log.Printf("[Service] {{.Name}} created successfully: ID=%d", {{.LowerName}}.ID)
+	{{end}}
+
+	return {{.LowerName}}, nil
+}
+
+func (s *{{.LowerName}}Service) GetByID(ctx context.Context, id uint) (*models.{{.Name}}, error) {
+	{{if .Config.Features.Cache.Enabled}}
+	// Try cache first
+	cacheKey := fmt.Sprintf("{{.LowerName}}:%d", id)
+	if cached, found := s.cache.Get(cacheKey); found {
+		{{if .Config.Features.Logging.Enabled}}
+		log.Printf("[Service] Cache hit for {{.LowerName}} ID=%d", id)
+		{{end}}
+		return cached.(*models.{{.Name}}), nil
+	}
+	{{end}}
+
+	{{if .Config.Features.Repository}}
+	{{.LowerName}}, err := s.repo.FindByID(ctx, id)
+	{{else}}
+	var {{.LowerName}} models.{{.Name}}
+	err := s.db.WithContext(ctx).First(&{{.LowerName}}, id).Error
+	{{end}}
+	
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, Err{{.Name}}NotFound
+		}
+		{{if .Config.Features.Logging.Enabled}}
+		log.Printf("[Service] Failed to get {{.LowerName}}: %v", err)
+		{{end}}
+		return nil, err
+	}
+
+	{{if .Config.Features.Cache.Enabled}}
+	// Cache the result
+	s.cache.Set(cacheKey, {{if .Config.Features.Repository}}{{.LowerName}}{{else}}&{{.LowerName}}{{end}}, cache.DefaultExpiration)
+	{{end}}
+
+	return {{if .Config.Features.Repository}}{{.LowerName}}{{else}}&{{.LowerName}}{{end}}, nil
+}
+
+func (s *{{.LowerName}}Service) List(ctx context.Context, {{if .Config.Features.DTO}}req *dto.List{{.Name}}Request{{else}}page, pageSize int{{end}}) ([]*models.{{.Name}}, int64, error) {
+	{{if .Config.Features.Logging.Enabled}}
+	log.Printf("[Service] Listing {{.LowerName}}s")
+	{{end}}
+
+	{{if .Config.Features.Repository}}
+	return s.repo.List(ctx, {{if .Config.Features.DTO}}req.Page, req.PageSize{{else}}page, pageSize{{end}})
+	{{else}}
+	var {{.LowerName}}s []*models.{{.Name}}
+	var total int64
+
+	query := s.db.WithContext(ctx).Model(&models.{{.Name}}{})
+
+	{{if .Config.Features.Search}}
+	{{if .Config.Features.DTO}}
+	if req.Search != "" {
+		{{range $index, $field := .Fields}}
+		{{if $field.Searchable}}
+		{{if eq $index 0}}query = query.Where("{{$field.JsonTag}} LIKE ?", "%"+req.Search+"%")
+		{{else}}query = query.Or("{{$field.JsonTag}} LIKE ?", "%"+req.Search+"%")
+		{{end}}
+		{{end}}
+		{{end}}
+	}
+	{{end}}
+	{{end}}
+
+	{{if .Config.Features.Filter.Enabled}}
+	// Apply filters
+	{{if .Config.Features.DTO}}
+	if len(req.Filters) > 0 {
+		for field, value := range req.Filters {
+			query = query.Where(field+" = ?", value)
+		}
+	}
+	{{end}}
+	{{end}}
+
+	{{if .Config.Features.Sort}}
+	{{if .Config.Features.DTO}}
+	if req.SortBy != "" {
+		order := req.Order
+		if order == "" {
+			order = "desc"
+		}
+		query = query.Order(req.SortBy + " " + order)
+	} else {
+	{{end}}
+		query = query.Order("id desc")
+	{{if .Config.Features.DTO}}
+	}
+	{{end}}
+	{{end}}
+
+	// Get total count
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	// Get paginated results
+	{{if .Config.Features.DTO}}
+	offset := (req.Page - 1) * req.PageSize
+	if err := query.Offset(offset).Limit(req.PageSize).Find(&{{.LowerName}}s).Error; err != nil {
+	{{else}}
+	offset := (page - 1) * pageSize
+	if err := query.Offset(offset).Limit(pageSize).Find(&{{.LowerName}}s).Error; err != nil {
+	{{end}}
+		return nil, 0, err
+	}
+
+	return {{.LowerName}}s, total, nil
+	{{end}}
+}
+
+func (s *{{.LowerName}}Service) Update(ctx context.Context, id uint, {{if .Config.Features.DTO}}req *dto.Update{{.Name}}Request{{else}}{{.LowerName}} *models.{{.Name}}{{end}}) (*models.{{.Name}}, error) {
+	{{if .Config.Features.Logging.Enabled}}
+	log.Printf("[Service] Updating {{.LowerName}} ID=%d", id)
+	{{end}}
+
+	// Check if exists
+	existing, err := s.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	{{if .Config.Features.DTO}}
+	// Update fields
+	{{range .Fields}}
+	{{if and (not .IsID) (not .Sensitive)}}
+	if req.{{.Name}} != nil {
+		existing.{{.Name}} = *req.{{.Name}}
+	}
+	{{end}}
+	{{end}}
+	{{end}}
+
+	{{if .Config.Features.Repository}}
+	if err := s.repo.Update(ctx, existing); err != nil {
+	{{else}}
+	if err := s.db.WithContext(ctx).Save({{if .Config.Features.DTO}}existing{{else}}{{.LowerName}}{{end}}).Error; err != nil {
+	{{end}}
+		{{if .Config.Features.Logging.Enabled}}
+		log.Printf("[Service] Failed to update {{.LowerName}}: %v", err)
+		{{end}}
+		return nil, err
+	}
+
+	{{if .Config.Features.Cache.Enabled}}
+	// Invalidate cache
+	cacheKey := fmt.Sprintf("{{.LowerName}}:%d", id)
+	s.cache.Delete(cacheKey)
+	s.cache.Delete("{{.LowerName}}:list")
+	{{end}}
+
+	return existing, nil
+}
+
+func (s *{{.LowerName}}Service) Delete(ctx context.Context, id uint) error {
+	{{if .Config.Features.Logging.Enabled}}
+	log.Printf("[Service] Deleting {{.LowerName}} ID=%d", id)
+	{{end}}
+
+	{{if .Config.Features.Repository}}
+	if err := s.repo.Delete(ctx, id); err != nil {
+	{{else}}
+	{{if .Config.Model.SoftDelete}}
+	if err := s.db.WithContext(ctx).Delete(&models.{{.Name}}{}, id).Error; err != nil {
+	{{else}}
+	if err := s.db.WithContext(ctx).Unscoped().Delete(&models.{{.Name}}{}, id).Error; err != nil {
+	{{end}}
+	{{end}}
+		{{if .Config.Features.Logging.Enabled}}
+		log.Printf("[Service] Failed to delete {{.LowerName}}: %v", err)
+		{{end}}
+		return err
+	}
+
+	{{if .Config.Features.Cache.Enabled}}
+	// Invalidate cache
+	cacheKey := fmt.Sprintf("{{.LowerName}}:%d", id)
+	s.cache.Delete(cacheKey)
+	s.cache.Delete("{{.LowerName}}:list")
+	{{end}}
+
+	return nil
+}
+
+{{if .Config.Features.Batch}}
+func (s *{{.LowerName}}Service) BatchCreate(ctx context.Context, {{.LowerName}}s []*models.{{.Name}}) error {
+	{{if .Config.Features.Logging.Enabled}}
+	log.Printf("[Service] Batch creating %d {{.LowerName}}s", len({{.LowerName}}s))
+	{{end}}
+
+	{{if .Config.Features.Repository}}
+	return s.repo.BatchCreate(ctx, {{.LowerName}}s)
+	{{else}}
+	return s.db.WithContext(ctx).CreateInBatches({{.LowerName}}s, 100).Error
+	{{end}}
+}
+
+func (s *{{.LowerName}}Service) BatchDelete(ctx context.Context, ids []uint) error {
+	{{if .Config.Features.Logging.Enabled}}
+	log.Printf("[Service] Batch deleting %d {{.LowerName}}s", len(ids))
+	{{end}}
+
+	{{if .Config.Features.Repository}}
+	return s.repo.BatchDelete(ctx, ids)
+	{{else}}
+	return s.db.WithContext(ctx).Delete(&models.{{.Name}}{}, ids).Error
+	{{end}}
+}
+{{end}}
+
+{{if .Config.Features.Export.Enabled}}
+func (s *{{.LowerName}}Service) Export(ctx context.Context, format string) ([]byte, error) {
+	// TODO: Implement export logic based on format (csv, xlsx, json)
+	return nil, errors.New("not implemented")
+}
+{{end}}

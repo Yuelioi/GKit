@@ -11,6 +11,8 @@ import (
 
 	"github.com/Yuelioi/gkit/web/gin/templatex/conf"
 	"github.com/Yuelioi/gkit/web/gin/templatex/parser"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 //go:embed templates/*
@@ -20,6 +22,10 @@ type Generator struct {
 	templatePath string
 	useEmbed     bool
 	funcMap      template.FuncMap
+}
+
+func SafeTitle(s string) string {
+	return cases.Title(language.English).String(s)
 }
 
 func NewGenerator(opts ...GeneratorOption) *Generator {
@@ -49,7 +55,7 @@ func createTemplateFuncMap() template.FuncMap {
 	return template.FuncMap{
 		"toLower":    strings.ToLower,
 		"toUpper":    strings.ToUpper,
-		"title":      strings.Title,
+		"title":      SafeTitle,
 		"camelCase":  toCamelCase,
 		"snakeCase":  toSnakeCase,
 		"kebabCase":  toKebabCase,
@@ -160,6 +166,14 @@ func (g *Generator) generateFile(templateName, outputPath string, data interface
 }
 
 func (g *Generator) GenerateExampleConfig(filename string) error {
+	// 检查文件是否已存在
+	if _, err := os.Stat(filename); err == nil {
+		fmt.Printf("⚠️ 配置文件已存在，跳过生成：%s\n", filename)
+		return nil
+	} else if !os.IsNotExist(err) {
+		// 其他错误（例如权限问题）
+		return fmt.Errorf("❌ 检查文件状态失败: %v", err)
+	}
 	config, err := g.getTemplateStr("config.yaml")
 	if err != nil {
 		return fmt.Errorf("❌ 读取示例配置模板失败: %v", err)
@@ -252,7 +266,7 @@ func toCamelCase(s string) string {
 		return r == '_' || r == '-' || r == ' '
 	})
 	for i := 0; i < len(words); i++ {
-		words[i] = strings.Title(words[i])
+		words[i] = SafeTitle(words[i])
 	}
 	return strings.Join(words, "")
 }

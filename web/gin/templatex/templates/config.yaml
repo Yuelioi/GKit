@@ -3,7 +3,6 @@
 model:
   files:                          # 模型文件路径列表
     - "./models/user.go"
-    - "./models/product.go"
   package: "your-project"         # 项目包名
   soft_delete: true               # 启用软删除
   timestamps: true                # 自动时间戳 (CreatedAt, UpdatedAt)
