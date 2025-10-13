@@ -2,11 +2,12 @@ package {{.Config.Output.Structure.route}}
 
 import (
 	"{{.Config.Output.BasePackage}}/{{.Config.Output.Structure.handler}}"
+	"{{.Config.Output.BasePackage}}/{{.Config.Output.Structure.Service}}"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
 
-func Setup{{.Name}}Routes(r *gin.Engine, db *gorm.DB) {
+func Setup{{.Name}}Routes(r *gin.Engine, s {{.Name}}Service) {
 	handler := {{.Config.Output.Structure.handler}}.New{{.Name}}Handler(db)
 	
 	{{.LowerName}}Group := r.Group("{{.Config.API.Prefix}}/{{if .Config.API.Group}}{{.Config.API.Group}}/{{end}}{{.LowerName}}s")

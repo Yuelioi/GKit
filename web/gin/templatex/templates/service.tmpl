@@ -36,7 +36,7 @@ type {{.Name}}Service interface {
 
 type {{.LowerName}}Service struct {
 	{{if .Config.Features.Repository}}
-	repo repository.{{.Name}}Repository
+	repo {{.Config.Output.Structure.repository}}.{{.Name}}Repository
 	{{else}}
 	db *gorm.DB
 	{{end}}
@@ -46,7 +46,7 @@ type {{.LowerName}}Service struct {
 }
 
 {{if .Config.Features.Repository}}
-func New{{.Name}}Service(repo repository.{{.Name}}Repository{{if .Config.Features.Cache.Enabled}}, cache *cache.Cache{{end}}) {{.Name}}Service {
+func New{{.Name}}Service(repo {{.Config.Output.Structure.repository}}.{{.Name}}Repository{{if .Config.Features.Cache.Enabled}}, cache *cache.Cache{{end}}) {{.Name}}Service {
 {{else}}
 func New{{.Name}}Service(db *gorm.DB{{if .Config.Features.Cache.Enabled}}, cache *cache.Cache{{end}}) {{.Name}}Service {
 {{end}}
