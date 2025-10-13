@@ -1,0 +1,165 @@
+package {{.Config.Output.Structure.repository}}
+
+import (
+	"context"
+
+	"{{.Config.Model.Package}}/models"
+	"gorm.io/gorm"
+)
+
+type {{.Name}}Repository interface {
+	Create(ctx context.Context, {{.LowerName}} *models.{{.Name}}) error
+	FindByID(ctx context.Context, id uint) (*models.{{.Name}}, error)
+	FindAll(ctx context.Context) ([]*models.{{.Name}}, error)
+	List(ctx context.Context, page, pageSize int) ([]*models.{{.Name}}, int64, error)
+	Update(ctx context.Context, {{.LowerName}} *models.{{.Name}}) error
+	Delete(ctx context.Context, id uint) error
+	{{if .Config.Features.Batch}}
+	BatchCreate(ctx context.Context, {{.LowerName}}s []*models.{{.Name}}) error
+	BatchDelete(ctx context.Context, ids []uint) error
+	{{end}}
+	{{if .Config.Features.Search}}
+	Search(ctx context.Context, keyword string, page, pageSize int) ([]*models.{{.Name}}, int64, error)
+	{{end}}
+	Count(ctx context.Context) (int64, error)
+	Exists(ctx context.Context, id uint) (bool, error)
+}
+
+type {{.LowerName}}Repository struct {
+	db *gorm.DB
+}
+
+func New{{.Name}}Repository(db *gorm.DB) {{.Name}}Repository {
+	return &{{.LowerName}}Repository{db: db}
+}
+
+func (r *{{.LowerName}}Repository) Create(ctx context.Context, {{.LowerName}} *models.{{.Name}}) error {
+	{{if .Config.Database.Transaction}}
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		return tx.Create({{.LowerName}}).Error
+	})
+	{{else}}
+	return r.db.WithContext(ctx).Create({{.LowerName}}).Error
+	{{end}}
+}
+
+func (r *{{.LowerName}}Repository) FindByID(ctx context.Context, id uint) (*models.{{.Name}}, error) {
+	var {{.LowerName}} models.{{.Name}}
+	query := r.db.WithContext(ctx)
+
+	{{if len .Config.Database.Preload}}
+	// Preload associations
+	{{range .Config.Database.Preload}}
+	query = query.Preload("{{.}}")
+	{{end}}
+	{{end}}
+
+	err := query.First(&{{.LowerName}}, id).Error
+	if err != nil {
+		return nil, err
+	}
+	return &{{.LowerName}}, nil
+}
+
+func (r *{{.LowerName}}Repository) FindAll(ctx context.Context) ([]*models.{{.Name}}, error) {
+	var {{.LowerName}}s []*models.{{.Name}}
+	err := r.db.WithContext(ctx).Find(&{{.LowerName}}s).Error
+	return {{.LowerName}}s, err
+}
+
+func (r *{{.LowerName}}Repository) List(ctx context.Context, page, pageSize int) ([]*models.{{.Name}}, int64, error) {
+	var {{.LowerName}}s []*models.{{.Name}}
+	var total int64
+
+	query := r.db.WithContext(ctx).Model(&models.{{.Name}}{})
+
+	// Count total
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	// Paginate
+	offset := (page - 1) * pageSize
+	err := query.Offset(offset).Limit(pageSize).Find(&{{.LowerName}}s).Error
+
+	return {{.LowerName}}s, total, err
+}
+
+func (r *{{.LowerName}}Repository) Update(ctx context.Context, {{.LowerName}} *models.{{.Name}}) error {
+	{{if .Config.Database.Transaction}}
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		return tx.Save({{.LowerName}}).Error
+	})
+	{{else}}
+	return r.db.WithContext(ctx).Save({{.LowerName}}).Error
+	{{end}}
+}
+
+func (r *{{.LowerName}}Repository) Delete(ctx context.Context, id uint) error {
+	{{if .Config.Database.Transaction}}
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		{{if .Config.Model.SoftDelete}}
+		return tx.Delete(&models.{{.Name}}{}, id).Error
+		{{else}}
+		return tx.Unscoped().Delete(&models.{{.Name}}{}, id).Error
+		{{end}}
+	})
+	{{else}}
+	{{if .Config.Model.SoftDelete}}
+	return r.db.WithContext(ctx).Delete(&models.{{.Name}}{}, id).Error
+	{{else}}
+	return r.db.WithContext(ctx).Unscoped().Delete(&models.{{.Name}}{}, id).Error
+	{{end}}
+	{{end}}
+}
+
+{{if .Config.Features.Batch}}
+func (r *{{.LowerName}}Repository) BatchCreate(ctx context.Context, {{.LowerName}}s []*models.{{.Name}}) error {
+	return r.db.WithContext(ctx).CreateInBatches({{.LowerName}}s, 100).Error
+}
+
+func (r *{{.LowerName}}Repository) BatchDelete(ctx context.Context, ids []uint) error {
+	return r.db.WithContext(ctx).Delete(&models.{{.Name}}{}, ids).Error
+}
+{{end}}
+
+{{if .Config.Features.Search}}
+func (r *{{.LowerName}}Repository) Search(ctx context.Context, keyword string, page, pageSize int) ([]*models.{{.Name}}, int64, error) {
+	var {{.LowerName}}s []*models.{{.Name}}
+	var total int64
+
+	query := r.db.WithContext(ctx).Model(&models.{{.Name}}{})
+
+	// Build search query
+	{{range $index, $field := .Fields}}
+	{{if $field.Searchable}}
+	{{if eq $index 0}}query = query.Where("{{$field.JsonTag}} LIKE ?", "%"+keyword+"%")
+	{{else}}query = query.Or("{{$field.JsonTag}} LIKE ?", "%"+keyword+"%")
+	{{end}}
+	{{end}}
+	{{end}}
+
+	// Count
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	// Paginate
+	offset := (page - 1) * pageSize
+	err := query.Offset(offset).Limit(pageSize).Find(&{{.LowerName}}s).Error
+
+	return {{.LowerName}}s, total, err
+}
+{{end}}
+
+func (r *{{.LowerName}}Repository) Count(ctx context.Context) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).Model(&models.{{.Name}}{}).Count(&count).Error
+	return count, err
+}
+
+func (r *{{.LowerName}}Repository) Exists(ctx context.Context, id uint) (bool, error) {
+	var count int64
+	err := r.db.WithContext(ctx).Model(&models.{{.Name}}{}).Where("id = ?", id).Count(&count).Error
+	return count > 0, err
+}

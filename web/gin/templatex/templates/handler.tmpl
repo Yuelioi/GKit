@@ -2,44 +2,108 @@ package {{.Config.Output.Structure.handler}}
 
 import (
 	"net/http"
+	"strconv"
+	{{if .Config.Features.Logging.Enabled}}"log"{{end}}
+
 	"{{.Config.Model.Package}}/models"
+	{{if .Config.Features.Service}}"{{.Config.Model.Package}}/{{.Config.Output.Structure.service}}"{{end}}
+	{{if .Config.Features.DTO}}"{{.Config.Model.Package}}/{{.Config.Output.Structure.dto}}"{{end}}
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
+	{{if not .Config.Features.Service}}"gorm.io/gorm"{{end}}
 	{{if .Config.Features.Validation}}"github.com/go-playground/validator/v10"{{end}}
 )
 
 type {{.Name}}Handler struct {
+	{{if .Config.Features.Service}}
+	service {{.Config.Output.Structure.service}}.{{.Name}}Service
+	{{else}}
 	db *gorm.DB
-	{{if .Config.Features.Validation}}validate *validator.Validate{{end}}
+	{{end}}
+	{{if .Config.Features.Validation}}
+	validate *validator.Validate
+	{{end}}
 }
 
+{{if .Config.Features.Service}}
+func New{{.Name}}Handler(service {{.Config.Output.Structure.service}}.{{.Name}}Service) *{{.Name}}Handler {
+	return &{{.Name}}Handler{
+		service: service,
+		{{if .Config.Features.Validation}}validate: validator.New(),{{end}}
+	}
+}
+{{else}}
 func New{{.Name}}Handler(db *gorm.DB) *{{.Name}}Handler {
 	return &{{.Name}}Handler{
 		db: db,
 		{{if .Config.Features.Validation}}validate: validator.New(),{{end}}
 	}
 }
+{{end}}
 
 {{if index .Config.API.Methods "create"}}
-// Create{{.Name}} 创建{{.Name}}
+// Create{{.Name}} godoc
+// @Summary 创建{{.Name}}
+// @Description 创建新的{{.Name}}
+// @Tags {{.LowerName}}
+// @Accept json
+// @Produce json
+// @Param {{.LowerName}} body {{if .Config.Features.DTO}}dto.Create{{.Name}}Request{{else}}models.{{.Name}}{{end}} true "{{.Name}}信息"
+// @Success 201 {object} map[string]interface{} "创建成功"
+// @Failure 400 {object} map[string]interface{} "请求参数错误"
+// @Failure 500 {object} map[string]interface{} "服务器错误"
+// @Router {{.Config.API.Prefix}}/{{.LowerName}}s [post]
 func (h *{{.Name}}Handler) Create{{.Name}}(c *gin.Context) {
-	var {{.LowerName}} models.{{.Name}}
-	if err := c.ShouldBindJSON(&{{.LowerName}}); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	{{if .Config.Features.Logging.Enabled}}
+	log.Printf("[Handler] Create{{.Name}} called")
+	{{end}}
+
+	var {{if .Config.Features.DTO}}req dto.Create{{.Name}}Request{{else}}{{.LowerName}} models.{{.Name}}{{end}}
+	if err := c.ShouldBindJSON(&{{if .Config.Features.DTO}}req{{else}}{{.LowerName}}{{end}}); err != nil {
+		{{if .Config.Features.Logging.Enabled}}
+		log.Printf("[Handler] Bind error: %v", err)
+		{{end}}
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code": 400,
+			"message": "Invalid request",
+			"error": err.Error(),
+		})
 		return
 	}
 
 	{{if .Config.Features.Validation}}
-	if err := h.validate.Struct({{.LowerName}}); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	if err := h.validate.Struct({{if .Config.Features.DTO}}req{{else}}{{.LowerName}}{{end}}); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code": 400,
+			"message": "Validation failed",
+			"error": err.Error(),
+		})
 		return
 	}
 	{{end}}
 
-	if err := h.db.Create(&{{.LowerName}}).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	{{if .Config.Features.Service}}
+	{{.LowerName}}, err := h.service.Create(c.Request.Context(), &{{if .Config.Features.DTO}}req{{else}}{{.LowerName}}{{end}})
+	if err != nil {
+		{{if .Config.Features.Logging.Enabled}}
+		log.Printf("[Handler] Service error: %v", err)
+		{{end}}
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code": 500,
+			"message": "Failed to create {{.LowerName}}",
+			"error": err.Error(),
+		})
 		return
 	}
+	{{else}}
+	if err := h.db.Create(&{{.LowerName}}).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code": 500,
+			"message": "Failed to create {{.LowerName}}",
+			"error": err.Error(),
+		})
+		return
+	}
+	{{end}}
 
 	c.JSON(http.StatusCreated, gin.H{
 		"code": 0,
@@ -50,23 +114,62 @@ func (h *{{.Name}}Handler) Create{{.Name}}(c *gin.Context) {
 {{end}}
 
 {{if index .Config.API.Methods "get"}}
-// Get{{.Name}} 获取单个{{.Name}}
+// Get{{.Name}} godoc
+// @Summary 获取{{.Name}}详情
+// @Description 根据ID获取{{.Name}}详情
+// @Tags {{.LowerName}}
+// @Accept json
+// @Produce json
+// @Param id path int true "{{.Name}} ID"
+// @Success 200 {object} map[string]interface{} "成功"
+// @Failure 404 {object} map[string]interface{} "未找到"
+// @Failure 500 {object} map[string]interface{} "服务器错误"
+// @Router {{.Config.API.Prefix}}/{{.LowerName}}s/{id} [get]
 func (h *{{.Name}}Handler) Get{{.Name}}(c *gin.Context) {
-	id := c.Param("id")
-	var {{.LowerName}} models.{{.Name}}
-
-	{{if .Config.Model.SoftDelete}}
-	if err := h.db.First(&{{.LowerName}}, id).Error; err != nil {
-	{{else}}
-	if err := h.db.Unscoped().First(&{{.LowerName}}, id).Error; err != nil {
-	{{end}}
-		if err == gorm.ErrRecordNotFound {
-			c.JSON(http.StatusNotFound, gin.H{"error": "{{.Name}} not found"})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code": 400,
+			"message": "Invalid ID format",
+		})
 		return
 	}
+
+	{{if .Config.Features.Service}}
+	{{.LowerName}}, err := h.service.GetByID(c.Request.Context(), uint(id))
+	if err != nil {
+		statusCode := http.StatusInternalServerError
+		message := "Failed to get {{.LowerName}}"
+		
+		if err == {{.Config.Output.Structure.service}}.Err{{.Name}}NotFound {
+			statusCode = http.StatusNotFound
+			message = "{{.Name}} not found"
+		}
+
+		c.JSON(statusCode, gin.H{
+			"code": statusCode,
+			"message": message,
+		})
+		return
+	}
+	{{else}}
+	var {{.LowerName}} models.{{.Name}}
+	if err := h.db.First(&{{.LowerName}}, id).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, gin.H{
+				"code": 404,
+				"message": "{{.Name}} not found",
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code": 500,
+			"message": "Failed to get {{.LowerName}}",
+			"error": err.Error(),
+		})
+		return
+	}
+	{{end}}
 
 	c.JSON(http.StatusOK, gin.H{
 		"code": 0,
@@ -77,24 +180,60 @@ func (h *{{.Name}}Handler) Get{{.Name}}(c *gin.Context) {
 {{end}}
 
 {{if index .Config.API.Methods "list"}}
-// List{{.PluralName}} 获取{{.Name}}列表
+// List{{.PluralName}} godoc
+// @Summary 获取{{.Name}}列表
+// @Description 分页获取{{.Name}}列表
+// @Tags {{.LowerName}}
+// @Accept json
+// @Produce json
+// @Param page query int false "页码" default(1)
+// @Param page_size query int false "每页数量" default(10)
+{{if .Config.Features.Search}}// @Param search query string false "搜索关键词"{{end}}
+{{if .Config.Features.Sort}}// @Param sort_by query string false "排序字段"
+// @Param order query string false "排序方向" Enums(asc, desc){{end}}
+// @Success 200 {object} map[string]interface{} "成功"
+// @Failure 500 {object} map[string]interface{} "服务器错误"
+// @Router {{.Config.API.Prefix}}/{{.LowerName}}s [get]
 func (h *{{.Name}}Handler) List{{.PluralName}}(c *gin.Context) {
-	var {{.LowerName}}s []models.{{.Name}}
+	{{if .Config.Features.DTO}}
+	var req dto.List{{.Name}}Request
+	if err := c.ShouldBindQuery(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code": 400,
+			"message": "Invalid query parameters",
+			"error": err.Error(),
+		})
+		return
+	}
+
+	// Set defaults
+	if req.Page == 0 {
+		req.Page = {{.Config.Pagination.DefaultPage}}
+	}
+	if req.PageSize == 0 {
+		req.PageSize = {{.Config.Pagination.DefaultSize}}
+	}
+	if req.PageSize > {{.Config.Pagination.MaxSize}} {
+		req.PageSize = {{.Config.Pagination.MaxSize}}
+	}
+	{{else}}
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "{{.Config.Pagination.DefaultPage}}"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "{{.Config.Pagination.DefaultSize}}"))
 	
-	{{if .Config.Pagination.Enabled}}
-	page := c.DefaultQuery("page", "{{.Config.Pagination.DefaultPage}}")
-	pageSize := c.DefaultQuery("page_size", "{{.Config.Pagination.DefaultSize}}")
-	
-	pageSizeInt := atoi(pageSize)
-	if pageSizeInt > {{.Config.Pagination.MaxSize}} {
-		pageSizeInt = {{.Config.Pagination.MaxSize}}
+	if pageSize > {{.Config.Pagination.MaxSize}} {
+		pageSize = {{.Config.Pagination.MaxSize}}
 	}
 	{{end}}
+
+	{{if .Config.Features.Service}}
+	{{.LowerName}}s, total, err := h.service.List(c.Request.Context(), {{if .Config.Features.DTO}}&req{{else}}page, pageSize{{end}})
+	{{else}}
+	var {{.LowerName}}s []*models.{{.Name}}
+	var total int64
 
 	query := h.db.Model(&models.{{.Name}}{})
 
 	{{if .Config.Features.Search}}
-	// 搜索功能
 	if search := c.Query("search"); search != "" {
 		{{range $index, $field := .Fields}}
 		{{if $field.Searchable}}
@@ -107,79 +246,139 @@ func (h *{{.Name}}Handler) List{{.PluralName}}(c *gin.Context) {
 	{{end}}
 
 	{{if .Config.Features.Sort}}
-	// 排序功能
-	if sort := c.DefaultQuery("sort", "id"); sort != "" {
+	if sort := c.DefaultQuery("sort_by", "id"); sort != "" {
 		order := c.DefaultQuery("order", "desc")
 		query = query.Order(sort + " " + order)
 	}
 	{{end}}
 
-	var total int64
-	query.Count(&total)
-
-	{{if .Config.Pagination.Enabled}}
-	if err := query.Offset((atoi(page) - 1) * pageSizeInt).
-		Limit(pageSizeInt).
-		Find(&{{.LowerName}}s).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	if err := query.Count(&total).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code": 500,
+			"message": "Failed to count {{.LowerName}}s",
+			"error": err.Error(),
+		})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"code": 0,
-		"message": "success",
-		"data":  {{.LowerName}}s,
-		"total": total,
-		"page":  atoi(page),
-		"page_size": pageSizeInt,
-	})
-	{{else}}
-	if err := query.Find(&{{.LowerName}}s).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"code": 0,
-		"message": "success",
-		"data":  {{.LowerName}}s,
-		"total": total,
-	})
+	offset := (page - 1) * pageSize
+	err := query.Offset(offset).Limit(pageSize).Find(&{{.LowerName}}s).Error
 	{{end}}
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code": 500,
+			"message": "Failed to list {{.LowerName}}s",
+			"error": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code": 0,
+		"message": "success",
+		"data": {{.LowerName}}s,
+		"total": total,
+		{{if .Config.Features.DTO}}
+		"page": req.Page,
+		"page_size": req.PageSize,
+		{{else}}
+		"page": page,
+		"page_size": pageSize,
+		{{end}}
+	})
 }
 {{end}}
 
 {{if index .Config.API.Methods "update"}}
-// Update{{.Name}} 更新{{.Name}}
+// Update{{.Name}} godoc
+// @Summary 更新{{.Name}}
+// @Description 更新{{.Name}}信息
+// @Tags {{.LowerName}}
+// @Accept json
+// @Produce json
+// @Param id path int true "{{.Name}} ID"
+// @Param {{.LowerName}} body {{if .Config.Features.DTO}}dto.Update{{.Name}}Request{{else}}models.{{.Name}}{{end}} true "{{.Name}}信息"
+// @Success 200 {object} map[string]interface{} "成功"
+// @Failure 400 {object} map[string]interface{} "请求参数错误"
+// @Failure 404 {object} map[string]interface{} "未找到"
+// @Failure 500 {object} map[string]interface{} "服务器错误"
+// @Router {{.Config.API.Prefix}}/{{.LowerName}}s/{id} [put]
 func (h *{{.Name}}Handler) Update{{.Name}}(c *gin.Context) {
-	id := c.Param("id")
-	var {{.LowerName}} models.{{.Name}}
-
-	if err := h.db.First(&{{.LowerName}}, id).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			c.JSON(http.StatusNotFound, gin.H{"error": "{{.Name}} not found"})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code": 400,
+			"message": "Invalid ID format",
+		})
 		return
 	}
 
-	if err := c.ShouldBindJSON(&{{.LowerName}}); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	var {{if .Config.Features.DTO}}req dto.Update{{.Name}}Request{{else}}{{.LowerName}} models.{{.Name}}{{end}}
+	if err := c.ShouldBindJSON(&{{if .Config.Features.DTO}}req{{else}}{{.LowerName}}{{end}}); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code": 400,
+			"message": "Invalid request",
+			"error": err.Error(),
+		})
 		return
 	}
 
 	{{if .Config.Features.Validation}}
-	if err := h.validate.Struct({{.LowerName}}); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	if err := h.validate.Struct({{if .Config.Features.DTO}}req{{else}}{{.LowerName}}{{end}}); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code": 400,
+			"message": "Validation failed",
+			"error": err.Error(),
+		})
 		return
 	}
 	{{end}}
 
-	if err := h.db.Save(&{{.LowerName}}).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	{{if .Config.Features.Service}}
+	{{.LowerName}}, err := h.service.Update(c.Request.Context(), uint(id), &{{if .Config.Features.DTO}}req{{else}}{{.LowerName}}{{end}})
+	if err != nil {
+		statusCode := http.StatusInternalServerError
+		message := "Failed to update {{.LowerName}}"
+		
+		if err == {{.Config.Output.Structure.service}}.Err{{.Name}}NotFound {
+			statusCode = http.StatusNotFound
+			message = "{{.Name}} not found"
+		}
+
+		c.JSON(statusCode, gin.H{
+			"code": statusCode,
+			"message": message,
+		})
 		return
 	}
+	{{else}}
+	var {{.LowerName}} models.{{.Name}}
+	if err := h.db.First(&{{.LowerName}}, id).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, gin.H{
+				"code": 404,
+				"message": "{{.Name}} not found",
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code": 500,
+			"message": "Failed to find {{.LowerName}}",
+			"error": err.Error(),
+		})
+		return
+	}
+
+	if err := h.db.Model(&{{.LowerName}}).Updates(&{{.LowerName}}).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code": 500,
+			"message": "Failed to update {{.LowerName}}",
+			"error": err.Error(),
+		})
+		return
+	}
+	{{end}}
 
 	c.JSON(http.StatusOK, gin.H{
 		"code": 0,
@@ -190,18 +389,50 @@ func (h *{{.Name}}Handler) Update{{.Name}}(c *gin.Context) {
 {{end}}
 
 {{if index .Config.API.Methods "delete"}}
-// Delete{{.Name}} 删除{{.Name}}
+// Delete{{.Name}} godoc
+// @Summary 删除{{.Name}}
+// @Description 根据ID删除{{.Name}}
+// @Tags {{.LowerName}}
+// @Accept json
+// @Produce json
+// @Param id path int true "{{.Name}} ID"
+// @Success 200 {object} map[string]interface{} "成功"
+// @Failure 400 {object} map[string]interface{} "请求参数错误"
+// @Failure 500 {object} map[string]interface{} "服务器错误"
+// @Router {{.Config.API.Prefix}}/{{.LowerName}}s/{id} [delete]
 func (h *{{.Name}}Handler) Delete{{.Name}}(c *gin.Context) {
-	id := c.Param("id")
-	
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code": 400,
+			"message": "Invalid ID format",
+		})
+		return
+	}
+
+	{{if .Config.Features.Service}}
+	if err := h.service.Delete(c.Request.Context(), uint(id)); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code": 500,
+			"message": "Failed to delete {{.LowerName}}",
+			"error": err.Error(),
+		})
+		return
+	}
+	{{else}}
 	{{if .Config.Model.SoftDelete}}
 	if err := h.db.Delete(&models.{{.Name}}{}, id).Error; err != nil {
 	{{else}}
 	if err := h.db.Unscoped().Delete(&models.{{.Name}}{}, id).Error; err != nil {
 	{{end}}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code": 500,
+			"message": "Failed to delete {{.LowerName}}",
+			"error": err.Error(),
+		})
 		return
 	}
+	{{end}}
 
 	c.JSON(http.StatusOK, gin.H{
 		"code": 0,
@@ -210,3 +441,129 @@ func (h *{{.Name}}Handler) Delete{{.Name}}(c *gin.Context) {
 }
 {{end}}
 
+{{if .Config.Features.Batch}}
+// BatchCreate{{.PluralName}} godoc
+// @Summary 批量创建{{.Name}}
+// @Description 批量创建多个{{.Name}}
+// @Tags {{.LowerName}}
+// @Accept json
+// @Produce json
+// @Param {{.LowerName}}s body []models.{{.Name}} true "{{.Name}}列表"
+// @Success 201 {object} map[string]interface{} "成功"
+// @Failure 400 {object} map[string]interface{} "请求参数错误"
+// @Failure 500 {object} map[string]interface{} "服务器错误"
+// @Router {{.Config.API.Prefix}}/{{.LowerName}}s/batch [post]
+func (h *{{.Name}}Handler) BatchCreate{{.PluralName}}(c *gin.Context) {
+	var {{.LowerName}}s []*models.{{.Name}}
+	if err := c.ShouldBindJSON(&{{.LowerName}}s); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code": 400,
+			"message": "Invalid request",
+			"error": err.Error(),
+		})
+		return
+	}
+
+	{{if .Config.Features.Service}}
+	if err := h.service.BatchCreate(c.Request.Context(), {{.LowerName}}s); err != nil {
+	{{else}}
+	if err := h.db.CreateInBatches({{.LowerName}}s, 100).Error; err != nil {
+	{{end}}
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code": 500,
+			"message": "Failed to batch create {{.LowerName}}s",
+			"error": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{
+		"code": 0,
+		"message": "success",
+		"data": {{.LowerName}}s,
+	})
+}
+
+// BatchDelete{{.PluralName}} godoc
+// @Summary 批量删除{{.Name}}
+// @Description 根据ID列表批量删除{{.Name}}
+// @Tags {{.LowerName}}
+// @Accept json
+// @Produce json
+// @Param request body dto.Batch{{.Name}}Request true "ID列表"
+// @Success 200 {object} map[string]interface{} "成功"
+// @Failure 400 {object} map[string]interface{} "请求参数错误"
+// @Failure 500 {object} map[string]interface{} "服务器错误"
+// @Router {{.Config.API.Prefix}}/{{.LowerName}}s/batch [delete]
+func (h *{{.Name}}Handler) BatchDelete{{.PluralName}}(c *gin.Context) {
+	var req struct {
+		IDs []uint `json:"ids" binding:"required,min=1"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code": 400,
+			"message": "Invalid request",
+			"error": err.Error(),
+		})
+		return
+	}
+
+	{{if .Config.Features.Service}}
+	if err := h.service.BatchDelete(c.Request.Context(), req.IDs); err != nil {
+	{{else}}
+	if err := h.db.Delete(&models.{{.Name}}{}, req.IDs).Error; err != nil {
+	{{end}}
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code": 500,
+			"message": "Failed to batch delete {{.LowerName}}s",
+			"error": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code": 0,
+		"message": "Batch delete successful",
+	})
+}
+{{end}}
+
+{{if .Config.Features.Export.Enabled}}
+// Export{{.PluralName}} godoc
+// @Summary 导出{{.Name}}数据
+// @Description 导出{{.Name}}数据为指定格式
+// @Tags {{.LowerName}}
+// @Accept json
+// @Produce json
+// @Param format query string true "导出格式" Enums({{join .Config.Features.Export.Formats ", "}})
+// @Success 200 {file} file "导出文件"
+// @Failure 400 {object} map[string]interface{} "请求参数错误"
+// @Failure 500 {object} map[string]interface{} "服务器错误"
+// @Router {{.Config.API.Prefix}}/{{.LowerName}}s/export [get]
+func (h *{{.Name}}Handler) Export{{.PluralName}}(c *gin.Context) {
+	format := c.DefaultQuery("format", "csv")
+	
+	{{if .Config.Features.Service}}
+	data, err := h.service.Export(c.Request.Context(), format)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code": 500,
+			"message": "Failed to export data",
+			"error": err.Error(),
+		})
+		return
+	}
+	{{else}}
+	// TODO: Implement export logic
+	c.JSON(http.StatusNotImplemented, gin.H{
+		"code": 501,
+		"message": "Export feature not implemented",
+	})
+	return
+	{{end}}
+
+	filename := "{{.LowerName}}s." + format
+	c.Header("Content-Disposition", "attachment; filename="+filename)
+	c.Data(http.StatusOK, "application/octet-stream", data)
+}
+{{end}}

@@ -1,0 +1,77 @@
+package {{.Config.Output.Structure.dto}}
+
+{{if .HasTimeField}}
+import "time"
+{{end}}
+
+// Create{{.Name}}Request 创建{{.Name}}请求
+type Create{{.Name}}Request struct {
+	{{range .Fields}}
+	{{if not .IsID}}
+	{{.Name}} {{.Type}} `json:"{{.JsonTag}}"{{if .Config.Features.Validation}} binding:"{{if .Required}}required{{end}}{{if .ValidateTag}},{{.ValidateTag}}{{end}}"{{end}}`
+	{{end}}
+	{{end}}
+}
+
+// Update{{.Name}}Request 更新{{.Name}}请求
+type Update{{.Name}}Request struct {
+	{{range .Fields}}
+	{{if not .IsID}}
+	{{.Name}} *{{.Type}} `json:"{{.JsonTag}},omitempty"{{if .Config.Features.Validation}} binding:"omitempty{{if .ValidateTag}},{{.ValidateTag}}{{end}}"{{end}}`
+	{{end}}
+	{{end}}
+}
+
+// {{.Name}}Response {{.Name}}响应
+type {{.Name}}Response struct {
+	{{range .Fields}}
+	{{if not .Sensitive}}
+	{{.Name}} {{.Type}} `json:"{{.JsonTag}}"`
+	{{end}}
+	{{end}}
+}
+
+// List{{.Name}}Request 列表查询请求
+type List{{.Name}}Request struct {
+	Page     int               `form:"page" binding:"omitempty,min=1"`
+	PageSize int               `form:"page_size" binding:"omitempty,min=1,max={{.Config.Pagination.MaxSize}}"`
+	{{if .Config.Features.Search}}
+	Search   string            `form:"search"`
+	{{end}}
+	{{if .Config.Features.Sort}}
+	SortBy   string            `form:"sort_by"`
+	Order    string            `form:"order" binding:"omitempty,oneof=asc desc"`
+	{{end}}
+	{{if .Config.Features.Filter.Enabled}}
+	Filters  map[string]interface{} `form:"-"`
+	{{end}}
+}
+
+// List{{.Name}}Response 列表响应
+type List{{.Name}}Response struct {
+	Data     []*{{.Name}}Response `json:"data"`
+	Total    int64                 `json:"total"`
+	Page     int                   `json:"page"`
+	PageSize int                   `json:"page_size"`
+	{{if eq .Config.Pagination.Style "cursor"}}
+	NextCursor string              `json:"next_cursor,omitempty"`
+	{{end}}
+}
+
+{{if .Config.Features.Batch}}
+// Batch{{.Name}}Request 批量操作请求
+type Batch{{.Name}}Request struct {
+	IDs []uint `json:"ids" binding:"required,min=1"`
+}
+{{end}}
+
+{{if .Config.Features.Export.Enabled}}
+// Export{{.Name}}Request 导出请求
+type Export{{.Name}}Request struct {
+	Format  string   `form:"format" binding:"required,oneof={{join .Config.Features.Export.Formats " "}}"`
+	Fields  []string `form:"fields"`
+	{{if .Config.Features.Filter.Enabled}}
+	Filters map[string]interface{} `form:"-"`
+	{{end}}
+}
+{{end}}

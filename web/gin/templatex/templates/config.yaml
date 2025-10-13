@@ -1,54 +1,288 @@
-# Gin CRUD Generator 配置文件
+# Gin CRUD 生成器配置文件 - 增强版
 
 model:
-  file: "./models/user.go"     # 模型文件路径
-  package: "your-project"       # 项目包名
-  soft_delete: false            # 启用软删除
-  # include:                    # 只生成指定模型
+  files:                          # 模型文件路径列表
+    - "./models/user.go"
+    - "./models/product.go"
+  package: "your-project"         # 项目包名
+  soft_delete: true               # 启用软删除
+  timestamps: true                # 自动时间戳 (CreatedAt, UpdatedAt)
+  
+  # 只生成指定模型 (可选)
+  # include:
   #   - User
   #   - Product
-  # exclude:                    # 排除指定模型
+  
+  # 排除指定模型 (可选)
+  # exclude:
   #   - TempModel
+  
+  # 自定义表名 (可选)
+  # table_name:
+  #   User: "sys_users"
+  #   Product: "shop_products"
 
 api:
-  prefix: "/api/v1"             # API 路径前缀
-  group: ""                     # 路由组名(可选)
-  methods:                      # 启用的方法
+  prefix: "/api/v1"              # API 路径前缀
+  group: ""                       # 路由组名 (可选)
+  versioning: true                # 启用API版本控制
+  
+  methods:                        # 启用的方法
     create: true
     get: true
     list: true
     update: true
     delete: true
-  # middleware:                 # 中间件(可选)
-  #   - middleware.Auth()
-  #   - middleware.Logger()
+  
+  # 中间件 (可选)
+  middleware:
+    - "middleware.Auth()"
+    - "middleware.Logger()"
+    - "middleware.RateLimit()"
+  
+  # 限流配置
+  rate_limit:
+    enabled: true
+    rate: "100/1m"               # 每分钟100次
+    burst: 10                    # 突发请求数
+  
+  # CORS 跨域配置
+  cors:
+    enabled: true
+    allow_origins:
+      - "http://localhost:3000"
+      - "https://yourdomain.com"
+    allow_methods:
+      - "GET"
+      - "POST"
+      - "PUT"
+      - "DELETE"
+    allow_headers:
+      - "Content-Type"
+      - "Authorization"
+    allow_credentials: true
+    max_age: 3600
+  
+  # Swagger API文档
+  swagger:
+    enabled: true
+    title: "Your API Documentation"
+    description: "RESTful API with Gin & GORM"
+    version: "1.0.0"
+    host: "localhost:8080"
+    base_path: "/api/v1"
 
 database:
-  type: "mysql"                 # 数据库类型: mysql, postgres, sqlite
-  time_fields: true             # 自动处理时间字段
+  type: "mysql"                  # 数据库类型: mysql, postgres, sqlite
+  time_fields: true              # 自动处理时间字段
+  transaction: true              # 启用事务支持
+  
+  # 预加载关联 (可选)
+  preload:
+    - "Profile"
+    - "Orders"
+  
+  # 索引配置 (可选)
+  indexes:
+    - name: "idx_email"
+      fields: ["email"]
+      unique: true
+    - name: "idx_name_age"
+      fields: ["name", "age"]
+      unique: false
+  
+  # GORM 钩子 (可选)
+  hooks:
+    - "BeforeCreate"
+    - "AfterCreate"
 
 pagination:
   enabled: true
   default_page: 1
   default_size: 10
   max_size: 100
-  style: "offset"               # offset 或 cursor
+  style: "offset"                # offset 或 cursor
+  cursor_field: "id"             # cursor分页使用的字段
 
 output:
-  dir: "internal"              # 输出目录
-  overwrite: false              # 是否覆盖已存在文件
+  dir: "internal"                # 输出目录
+  overwrite: false               # 是否覆盖已存在文件
+  
+  # 目录结构自定义
   structure:
     handler: "handlers"
     route: "routes"
     service: "services"
+    repository: "repositories"
+    dto: "dto"
+    middleware: "middleware"
+  
+  # 代码格式化
+  format:
+    enabled: true
+    gofmt: true
+    goimports: true
+    golangci: false
+  
+  # 文件头信息 (可选)
+  license: "MIT"
+  author: "Your Name"
 
 features:
-  validation: true              # 启用请求验证
-  cache: false                  # 启用缓存(待实现)
-  search: true                  # 启用搜索功能
-  search_fields:                # 可搜索的字段
-    - name
-    - email
-  sort: true                    # 启用排序
-  filter: false                 # 启用过滤(待实现)
-  export: false                 # 启用导出(待实现)
+  # 请求验证
+  validation: true
+  
+  # 缓存配置
+  cache:
+    enabled: true
+    type: "redis"                # redis, memory, memcached
+    ttl: "5m"                    # 过期时间
+    key_prefix: "api:"
+    strategy: "cache-aside"      # write-through, write-back, cache-aside
+  
+  # 搜索功能
+  search: true
+  search_fields:
+    - "name"
+    - "email"
+    - "description"
+  
+  # 排序功能
+  sort: true
+  
+  # 过滤功能
+  filter:
+    enabled: true
+    allowed_fields:
+      - "status"
+      - "type"
+      - "category_id"
+    operators:                   # 支持的操作符
+      - "eq"                     # 等于
+      - "ne"                     # 不等于
+      - "gt"                     # 大于
+      - "lt"                     # 小于
+      - "gte"                    # 大于等于
+      - "lte"                    # 小于等于
+      - "like"                   # 模糊匹配
+      - "in"                     # 在列表中
+  
+  # 导出功能
+  export:
+    enabled: true
+    formats:
+      - "csv"
+      - "xlsx"
+      - "json"
+      - "xml"
+    max_rows: 10000
+    async: true                  # 异步导出大量数据
+  
+  # 导入功能
+  import: true
+  
+  # 批量操作
+  batch: true
+  
+  # 分层架构
+  service: true                  # 生成 Service 层
+  repository: true               # 生成 Repository 层
+  dto: true                      # 生成 DTO 层
+  
+  # 日志配置
+  logging:
+    enabled: true
+    level: "info"                # debug, info, warn, error
+    format: "json"               # json, text
+    output: "stdout"             # stdout, file, both
+  
+  # 监控指标
+  metrics: true
+  
+  # 链路追踪
+  tracing: false
+  
+  # Panic 恢复
+  recovery: true
+  
+  # 验证器配置
+  validator:
+    custom_rules:
+      phone: "^1[3-9]\\d{9}$"
+      id_card: "^[1-9]\\d{5}(18|19|20)\\d{2}((0[1-9])|(1[0-2]))(([0-2][1-9])|10|20|30|31)\\d{3}[0-9Xx]$"
+    error_format: "detailed"     # simple, detailed
+    locale_support: true
+  
+  # 测试生成
+  test: true
+  
+  # Mock 生成
+  mock: true
+
+# 钩子配置 (可选)
+hooks:
+  before_create:
+    - "hashPassword"
+    - "generateUUID"
+  after_create:
+    - "sendWelcomeEmail"
+  before_update:
+    - "validatePermission"
+  after_update:
+    - "clearCache"
+  before_delete:
+    - "checkDependencies"
+  after_delete:
+    - "cleanupFiles"
+
+# 关联关系配置 (可选)
+relations:
+  enabled: true
+  relations:
+    - model: "User"
+      type: "hasOne"             # hasOne, hasMany, belongsTo, manyToMany
+      foreign_key: "user_id"
+      references: "id"
+      preload: true
+    
+    - model: "Order"
+      type: "hasMany"
+      foreign_key: "user_id"
+      references: "id"
+      preload: false
+    
+    - model: "Role"
+      type: "manyToMany"
+      join_table: "user_roles"
+      foreign_key: "user_id"
+      references: "role_id"
+      preload: true
+
+# 认证配置 (可选)
+auth:
+  enabled: true
+  type: "jwt"                    # jwt, oauth2, basic, apikey
+  
+  jwt:
+    secret: "your-secret-key-change-this"
+    expire_hours: 24
+    refresh_token: true
+    algorithm: "HS256"           # HS256, RS256
+  
+  # 需要认证的方法
+  protected:
+    - "create"
+    - "update"
+    - "delete"
+  
+  # 角色权限配置 (可选)
+  roles:
+    admin:
+      - "create"
+      - "read"
+      - "update"
+      - "delete"
+    user:
+      - "read"
+    guest:
+      - "read"
