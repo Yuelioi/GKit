@@ -1,0 +1,514 @@
+package {{.Config.Output.Structure.handler}}_test
+
+import (
+	"bytes"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"{{.Config.Model.Package}}/{{.Config.Output.Structure.handler}}"
+	"{{.Config.Model.Package}}/models"
+	{{if .Config.Features.Service}}"{{.Config.Model.Package}}/{{.Config.Output.Structure.service}}"{{end}}
+	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+	{{if not .Config.Features.Service}}"gorm.io/gorm"{{end}}
+)
+
+{{if .Config.Features.Service}}
+// Mock{{.Name}}Service is a mock implementation of {{.Name}}Service
+type Mock{{.Name}}Service struct {
+	mock.Mock
+}
+
+func (m *Mock{{.Name}}Service) Create(ctx context.Context, {{if .Config.Features.DTO}}req *dto.Create{{.Name}}Request{{else}}{{.LowerName}} *models.{{.Name}}{{end}}) (*models.{{.Name}}, error) {
+	args := m.Called(ctx, {{if .Config.Features.DTO}}req{{else}}{{.LowerName}}{{end}})
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.{{.Name}}), args.Error(1)
+}
+
+func (m *Mock{{.Name}}Service) GetByID(ctx context.Context, id uint) (*models.{{.Name}}, error) {
+	args := m.Called(ctx, id)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.{{.Name}}), args.Error(1)
+}
+
+func (m *Mock{{.Name}}Service) List(ctx context.Context, {{if .Config.Features.DTO}}req *dto.List{{.Name}}Request{{else}}page, pageSize int{{end}}) ([]*models.{{.Name}}, int64, error) {
+	args := m.Called(ctx, {{if .Config.Features.DTO}}req{{else}}page, pageSize{{end}})
+	return args.Get(0).([]*models.{{.Name}}), args.Get(1).(int64), args.Error(2)
+}
+
+func (m *Mock{{.Name}}Service) Update(ctx context.Context, id uint, {{if .Config.Features.DTO}}req *dto.Update{{.Name}}Request{{else}}{{.LowerName}} *models.{{.Name}}{{end}}) (*models.{{.Name}}, error) {
+	args := m.Called(ctx, id, {{if .Config.Features.DTO}}req{{else}}{{.LowerName}}{{end}})
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.{{.Name}}), args.Error(1)
+}
+
+func (m *Mock{{.Name}}Service) Delete(ctx context.Context, id uint) error {
+	args := m.Called(ctx, id)
+	return args.Error(0)
+}
+
+{{if .Config.Features.Batch}}
+func (m *Mock{{.Name}}Service) BatchCreate(ctx context.Context, {{.LowerName}}s []*models.{{.Name}}) error {
+	args := m.Called(ctx, {{.LowerName}}s)
+	return args.Error(0)
+}
+
+func (m *Mock{{.Name}}Service) BatchDelete(ctx context.Context, ids []uint) error {
+	args := m.Called(ctx, ids)
+	return args.Error(0)
+}
+{{end}}
+
+{{if .Config.Features.Export.Enabled}}
+func (m *Mock{{.Name}}Service) Export(ctx context.Context, format string) ([]byte, error) {
+	args := m.Called(ctx, format)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]byte), args.Error(1)
+}
+{{end}}
+{{end}}
+
+func setupRouter() *gin.Engine {
+	gin.SetMode(gin.TestMode)
+	router := gin.Default()
+	return router
+}
+
+func TestCreate{{.Name}}(t *testing.T) {
+	{{if .Config.Features.Service}}
+	mockService := new(Mock{{.Name}}Service)
+	handler := {{.Config.Output.Structure.handler}}.New{{.Name}}Handler(mockService)
+	{{else}}
+	// Setup test database
+	db := setupTestDB()
+	handler := {{.Config.Output.Structure.handler}}.New{{.Name}}Handler(db)
+	{{end}}
+
+	router := setupRouter()
+	router.POST("/{{.LowerName}}s", handler.Create{{.Name}})
+
+	tests := []struct {
+		name       string
+		payload    interface{}
+		setupMock  func()
+		wantStatus int
+		wantBody   map[string]interface{}
+	}{
+		{
+			name: "success",
+			payload: {{if .Config.Features.DTO}}dto.Create{{.Name}}Request{{else}}models.{{.Name}}{{end}}{
+				{{range .Fields}}
+				{{if not .IsID}}
+				// {{.Name}}: "test_value",
+				{{end}}
+				{{end}}
+			},
+			setupMock: func() {
+				{{if .Config.Features.Service}}
+				expected{{.Name}} := &models.{{.Name}}{
+					ID: 1,
+					{{range .Fields}}
+					{{if not .IsID}}
+					// {{.Name}}: "test_value",
+					{{end}}
+					{{end}}
+				}
+				mockService.On("Create", mock.Anything, mock.Anything).Return(expected{{.Name}}, nil)
+				{{end}}
+			},
+			wantStatus: http.StatusCreated,
+			wantBody: map[string]interface{}{
+				"code":    float64(0),
+				"message": "success",
+			},
+		},
+		{
+			name:    "invalid_json",
+			payload: "invalid json",
+			setupMock: func() {
+				// No mock setup needed for validation errors
+			},
+			wantStatus: http.StatusBadRequest,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			{{if .Config.Features.Service}}
+			if tt.setupMock != nil {
+				tt.setupMock()
+			}
+			{{end}}
+
+			jsonData, _ := json.Marshal(tt.payload)
+			req, _ := http.NewRequest(http.MethodPost, "/{{.LowerName}}s", bytes.NewBuffer(jsonData))
+			req.Header.Set("Content-Type", "application/json")
+
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			assert.Equal(t, tt.wantStatus, w.Code)
+
+			if tt.wantBody != nil {
+				var response map[string]interface{}
+				err := json.Unmarshal(w.Body.Bytes(), &response)
+				assert.NoError(t, err)
+				
+				for key, expectedValue := range tt.wantBody {
+					assert.Equal(t, expectedValue, response[key])
+				}
+			}
+
+			{{if .Config.Features.Service}}
+			mockService.AssertExpectations(t)
+			{{end}}
+		})
+	}
+}
+
+func TestGet{{.Name}}(t *testing.T) {
+	{{if .Config.Features.Service}}
+	mockService := new(Mock{{.Name}}Service)
+	handler := {{.Config.Output.Structure.handler}}.New{{.Name}}Handler(mockService)
+	{{else}}
+	db := setupTestDB()
+	handler := {{.Config.Output.Structure.handler}}.New{{.Name}}Handler(db)
+	{{end}}
+
+	router := setupRouter()
+	router.GET("/{{.LowerName}}s/:id", handler.Get{{.Name}})
+
+	tests := []struct {
+		name       string
+		id         string
+		setupMock  func()
+		wantStatus int
+	}{
+		{
+			name: "success",
+			id:   "1",
+			setupMock: func() {
+				{{if .Config.Features.Service}}
+				expected{{.Name}} := &models.{{.Name}}{
+					ID: 1,
+				}
+				mockService.On("GetByID", mock.Anything, uint(1)).Return(expected{{.Name}}, nil)
+				{{end}}
+			},
+			wantStatus: http.StatusOK,
+		},
+		{
+			name: "not_found",
+			id:   "999",
+			setupMock: func() {
+				{{if .Config.Features.Service}}
+				mockService.On("GetByID", mock.Anything, uint(999)).Return(nil, {{.Config.Output.Structure.service}}.Err{{.Name}}NotFound)
+				{{end}}
+			},
+			wantStatus: http.StatusNotFound,
+		},
+		{
+			name:       "invalid_id",
+			id:         "abc",
+			setupMock:  func() {},
+			wantStatus: http.StatusBadRequest,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.setupMock != nil {
+				tt.setupMock()
+			}
+
+			req, _ := http.NewRequest(http.MethodGet, "/{{.LowerName}}s/"+tt.id, nil)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			assert.Equal(t, tt.wantStatus, w.Code)
+
+			{{if .Config.Features.Service}}
+			mockService.AssertExpectations(t)
+			{{end}}
+		})
+	}
+}
+
+func TestList{{.PluralName}}(t *testing.T) {
+	{{if .Config.Features.Service}}
+	mockService := new(Mock{{.Name}}Service)
+	handler := {{.Config.Output.Structure.handler}}.New{{.Name}}Handler(mockService)
+	{{else}}
+	db := setupTestDB()
+	handler := {{.Config.Output.Structure.handler}}.New{{.Name}}Handler(db)
+	{{end}}
+
+	router := setupRouter()
+	router.GET("/{{.LowerName}}s", handler.List{{.PluralName}})
+
+	tests := []struct {
+		name       string
+		query      string
+		setupMock  func()
+		wantStatus int
+	}{
+		{
+			name:  "success",
+			query: "?page=1&page_size=10",
+			setupMock: func() {
+				{{if .Config.Features.Service}}
+				{{.LowerName}}s := []*models.{{.Name}}{
+					{ID: 1},
+					{ID: 2},
+				}
+				mockService.On("List", mock.Anything, mock.Anything).Return({{.LowerName}}s, int64(2), nil)
+				{{end}}
+			},
+			wantStatus: http.StatusOK,
+		},
+		{{if .Config.Features.Search}}
+		{
+			name:  "with_search",
+			query: "?page=1&page_size=10&search=test",
+			setupMock: func() {
+				{{if .Config.Features.Service}}
+				{{.LowerName}}s := []*models.{{.Name}}{}
+				mockService.On("List", mock.Anything, mock.Anything).Return({{.LowerName}}s, int64(0), nil)
+				{{end}}
+			},
+			wantStatus: http.StatusOK,
+		},
+		{{end}}
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.setupMock != nil {
+				tt.setupMock()
+			}
+
+			req, _ := http.NewRequest(http.MethodGet, "/{{.LowerName}}s"+tt.query, nil)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			assert.Equal(t, tt.wantStatus, w.Code)
+
+			var response map[string]interface{}
+			err := json.Unmarshal(w.Body.Bytes(), &response)
+			assert.NoError(t, err)
+			assert.Contains(t, response, "data")
+			assert.Contains(t, response, "total")
+
+			{{if .Config.Features.Service}}
+			mockService.AssertExpectations(t)
+			{{end}}
+		})
+	}
+}
+
+func TestUpdate{{.Name}}(t *testing.T) {
+	{{if .Config.Features.Service}}
+	mockService := new(Mock{{.Name}}Service)
+	handler := {{.Config.Output.Structure.handler}}.New{{.Name}}Handler(mockService)
+	{{else}}
+	db := setupTestDB()
+	handler := {{.Config.Output.Structure.handler}}.New{{.Name}}Handler(db)
+	{{end}}
+
+	router := setupRouter()
+	router.PUT("/{{.LowerName}}s/:id", handler.Update{{.Name}})
+
+	tests := []struct {
+		name       string
+		id         string
+		payload    interface{}
+		setupMock  func()
+		wantStatus int
+	}{
+		{
+			name: "success",
+			id:   "1",
+			payload: {{if .Config.Features.DTO}}dto.Update{{.Name}}Request{{else}}models.{{.Name}}{{end}}{
+				// Add update fields
+			},
+			setupMock: func() {
+				{{if .Config.Features.Service}}
+				updated{{.Name}} := &models.{{.Name}}{
+					ID: 1,
+				}
+				mockService.On("Update", mock.Anything, uint(1), mock.Anything).Return(updated{{.Name}}, nil)
+				{{end}}
+			},
+			wantStatus: http.StatusOK,
+		},
+		{
+			name: "not_found",
+			id:   "999",
+			payload: {{if .Config.Features.DTO}}dto.Update{{.Name}}Request{{else}}models.{{.Name}}{{end}}{},
+			setupMock: func() {
+				{{if .Config.Features.Service}}
+				mockService.On("Update", mock.Anything, uint(999), mock.Anything).Return(nil, {{.Config.Output.Structure.service}}.Err{{.Name}}NotFound)
+				{{end}}
+			},
+			wantStatus: http.StatusNotFound,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.setupMock != nil {
+				tt.setupMock()
+			}
+
+			jsonData, _ := json.Marshal(tt.payload)
+			req, _ := http.NewRequest(http.MethodPut, "/{{.LowerName}}s/"+tt.id, bytes.NewBuffer(jsonData))
+			req.Header.Set("Content-Type", "application/json")
+
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			assert.Equal(t, tt.wantStatus, w.Code)
+
+			{{if .Config.Features.Service}}
+			mockService.AssertExpectations(t)
+			{{end}}
+		})
+	}
+}
+
+func TestDelete{{.Name}}(t *testing.T) {
+	{{if .Config.Features.Service}}
+	mockService := new(Mock{{.Name}}Service)
+	handler := {{.Config.Output.Structure.handler}}.New{{.Name}}Handler(mockService)
+	{{else}}
+	db := setupTestDB()
+	handler := {{.Config.Output.Structure.handler}}.New{{.Name}}Handler(db)
+	{{end}}
+
+	router := setupRouter()
+	router.DELETE("/{{.LowerName}}s/:id", handler.Delete{{.Name}})
+
+	tests := []struct {
+		name       string
+		id         string
+		setupMock  func()
+		wantStatus int
+	}{
+		{
+			name: "success",
+			id:   "1",
+			setupMock: func() {
+				{{if .Config.Features.Service}}
+				mockService.On("Delete", mock.Anything, uint(1)).Return(nil)
+				{{end}}
+			},
+			wantStatus: http.StatusOK,
+		},
+		{
+			name:       "invalid_id",
+			id:         "abc",
+			setupMock:  func() {},
+			wantStatus: http.StatusBadRequest,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.setupMock != nil {
+				tt.setupMock()
+			}
+
+			req, _ := http.NewRequest(http.MethodDelete, "/{{.LowerName}}s/"+tt.id, nil)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			assert.Equal(t, tt.wantStatus, w.Code)
+
+			{{if .Config.Features.Service}}
+			mockService.AssertExpectations(t)
+			{{end}}
+		})
+	}
+}
+
+{{if .Config.Features.Batch}}
+func TestBatchCreate{{.PluralName}}(t *testing.T) {
+	{{if .Config.Features.Service}}
+	mockService := new(Mock{{.Name}}Service)
+	handler := {{.Config.Output.Structure.handler}}.New{{.Name}}Handler(mockService)
+	{{else}}
+	db := setupTestDB()
+	handler := {{.Config.Output.Structure.handler}}.New{{.Name}}Handler(db)
+	{{end}}
+
+	router := setupRouter()
+	router.POST("/{{.LowerName}}s/batch", handler.BatchCreate{{.PluralName}})
+
+	payload := []*models.{{.Name}}{
+		{},
+		{},
+	}
+
+	{{if .Config.Features.Service}}
+	mockService.On("BatchCreate", mock.Anything, mock.Anything).Return(nil)
+	{{end}}
+
+	jsonData, _ := json.Marshal(payload)
+	req, _ := http.NewRequest(http.MethodPost, "/{{.LowerName}}s/batch", bytes.NewBuffer(jsonData))
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusCreated, w.Code)
+}
+
+func TestBatchDelete{{.PluralName}}(t *testing.T) {
+	{{if .Config.Features.Service}}
+	mockService := new(Mock{{.Name}}Service)
+	handler := {{.Config.Output.Structure.handler}}.New{{.Name}}Handler(mockService)
+	{{else}}
+	db := setupTestDB()
+	handler := {{.Config.Output.Structure.handler}}.New{{.Name}}Handler(db)
+	{{end}}
+
+	router := setupRouter()
+	router.DELETE("/{{.LowerName}}s/batch", handler.BatchDelete{{.PluralName}})
+
+	payload := map[string]interface{}{
+		"ids": []uint{1, 2, 3},
+	}
+
+	{{if .Config.Features.Service}}
+	mockService.On("BatchDelete", mock.Anything, mock.Anything).Return(nil)
+	{{end}}
+
+	jsonData, _ := json.Marshal(payload)
+	req, _ := http.NewRequest(http.MethodDelete, "/{{.LowerName}}s/batch", bytes.NewBuffer(jsonData))
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+{{end}}
+
+{{if not .Config.Features.Service}}
+// setupTestDB creates a test database connection
+func setupTestDB() *gorm.DB {
+	// TODO: Setup test database (SQLite in-memory or test database)
+	return nil
+}
+{{end}}
