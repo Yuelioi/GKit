@@ -8,7 +8,7 @@ import "time"
 type Create{{.Name}}Request struct {
 	{{range .Fields}}
 	{{if not .IsID}}
-	{{.Name}} {{.Type}} `json:"{{.JsonTag}}"{{if .Config.Features.Validation}} binding:"{{if .Required}}required{{end}}{{if .ValidateTag}},{{.ValidateTag}}{{end}}"{{end}}`
+	{{.Name}} {{.Type}} `json:"{{.JsonTag}}"{{if $.Config.Features.Validation}} binding:"{{if .Required}}required{{end}}{{if .ValidateTag}},{{.ValidateTag}}{{end}}"{{end}}`
 	{{end}}
 	{{end}}
 }
@@ -17,7 +17,7 @@ type Create{{.Name}}Request struct {
 type Update{{.Name}}Request struct {
 	{{range .Fields}}
 	{{if not .IsID}}
-	{{.Name}} *{{.Type}} `json:"{{.JsonTag}},omitempty"{{if .Config.Features.Validation}} binding:"omitempty{{if .ValidateTag}},{{.ValidateTag}}{{end}}"{{end}}`
+	{{.Name}} *{{.Type}} `json:"{{.JsonTag}},omitempty"{{if $.Config.Features.Validation}} binding:"omitempty{{if .ValidateTag}},{{.ValidateTag}}{{end}}"{{end}}`
 	{{end}}
 	{{end}}
 }
