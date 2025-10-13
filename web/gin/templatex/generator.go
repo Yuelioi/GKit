@@ -195,6 +195,12 @@ func (g *Generator) GenerateModel(configFile string) error {
 		return fmt.Errorf("⚠️  模型文件列表为空，请检查配置文件！")
 	}
 
+	if config.Output.BasePackage == "" {
+		cleaned := filepath.Clean(config.Output.Dir)
+		cleaned = strings.TrimPrefix(cleaned, "../")
+		config.Output.BasePackage = path.Join(config.Model.Package, cleaned)
+	}
+
 	fmt.Println("🚀 开始生成代码...")
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 

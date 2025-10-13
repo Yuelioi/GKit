@@ -7,9 +7,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"{{.Config.Model.Package}}/{{.Config.Output.Structure.handler}}"
 	"{{.Config.Model.Package}}/models"
-	{{if .Config.Features.Service}}"{{.Config.Model.Package}}/{{.Config.Output.Structure.service}}"{{end}}
+	"{{.Config.Output.BasePackage}}/{{.Config.Output.Structure.handler}}"
+	{{if .Config.Features.Service}}"{{.Config.Output.BasePackage}}/{{.Config.Output.Structure.service}}"{{end}}
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"

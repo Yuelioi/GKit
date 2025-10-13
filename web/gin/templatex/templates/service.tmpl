@@ -8,8 +8,8 @@ import (
 	{{if .Config.Features.Cache.Enabled}}"time"{{end}}
 
 	"{{.Config.Model.Package}}/models"
-	{{if .Config.Features.Repository}}"{{.Config.Model.Package}}/{{.Config.Output.Structure.repository}}"{{end}}
-	{{if .Config.Features.DTO}}"{{.Config.Model.Package}}/{{.Config.Output.Structure.dto}}"{{end}}
+	{{if .Config.Features.Repository}}"{{.Config.Output.BasePackage}}/{{.Config.Output.Structure.repository}}"{{end}}
+	{{if .Config.Features.DTO}}"{{.Config.Output.BasePackage}}/{{.Config.Output.Structure.dto}}"{{end}}
 	{{if .Config.Features.Cache.Enabled}}"github.com/patrickmn/go-cache"{{end}}
 	"gorm.io/gorm"
 )

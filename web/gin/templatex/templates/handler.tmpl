@@ -6,8 +6,8 @@ import (
 	{{if .Config.Features.Logging.Enabled}}"log"{{end}}
 
 	"{{.Config.Model.Package}}/models"
-	{{if .Config.Features.Service}}"{{.Config.Model.Package}}/{{.Config.Output.Structure.service}}"{{end}}
-	{{if .Config.Features.DTO}}"{{.Config.Model.Package}}/{{.Config.Output.Structure.dto}}"{{end}}
+	{{if .Config.Features.Service}}"{{.Config.Output.BasePackage}}/{{.Config.Output.Structure.service}}"{{end}}
+	{{if .Config.Features.DTO}}"{{.Config.Output.BasePackage}}/{{.Config.Output.Structure.dto}}"{{end}}
 	"github.com/gin-gonic/gin"
 	{{if not .Config.Features.Service}}"gorm.io/gorm"{{end}}
 	{{if .Config.Features.Validation}}"github.com/go-playground/validator/v10"{{end}}

@@ -90,12 +90,13 @@ type PaginationConfig struct {
 }
 
 type OutputConfig struct {
-	Dir       string            `yaml:"dir"`
-	Structure map[string]string `yaml:"structure"`
-	Overwrite bool              `yaml:"overwrite"`
-	Format    FormatConfig      `yaml:"format"`  // 新增：格式化
-	License   string            `yaml:"license"` // 新增：许可证头
-	Author    string            `yaml:"author"`  // 新增：作者信息
+	Dir         string            `yaml:"dir"`
+	BasePackage string            `yaml:"base_package"`
+	Structure   map[string]string `yaml:"structure"`
+	Overwrite   bool              `yaml:"overwrite"`
+	Format      FormatConfig      `yaml:"format"`  // 新增：格式化
+	License     string            `yaml:"license"` // 新增：许可证头
+	Author      string            `yaml:"author"`  // 新增：作者信息
 }
 
 type FormatConfig struct {
@@ -282,7 +283,8 @@ func DefaultConfig() *Config {
 			Style:       "offset",
 		},
 		Output: OutputConfig{
-			Dir: "generated",
+			Dir:         "generated",
+			BasePackage: "generated",
 			Structure: map[string]string{
 				"handler":    "handlers",
 				"route":      "routes",

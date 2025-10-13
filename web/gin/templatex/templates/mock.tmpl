@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"{{.Config.Model.Package}}/models"
-	{{if .Config.Features.DTO}}"{{.Config.Model.Package}}/{{.Config.Output.Structure.dto}}"{{end}}
+	{{if .Config.Features.DTO}}"{{.Config.Output.BasePackage}}/{{.Config.Output.Structure.dto}}"{{end}}
 	"github.com/stretchr/testify/mock"
 )
 
