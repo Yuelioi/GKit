@@ -22,8 +22,7 @@ func NewBuilder(logger zerolog.Logger) *Builder {
 
 func Default(logger zerolog.Logger) gin.HandlerFunc {
 	return NewBuilder(logger).
-		WithIgnorePath("/health").
-		Handler()
+		Middleware()
 }
 
 // 忽略特定路径
@@ -33,7 +32,7 @@ func (b *Builder) WithIgnorePath(path string) *Builder {
 }
 
 // 构建 Gin 中间件
-func (b *Builder) Handler() gin.HandlerFunc {
+func (b *Builder) Middleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
 		path := c.Request.URL.Path

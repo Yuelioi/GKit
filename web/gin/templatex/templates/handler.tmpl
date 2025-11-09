@@ -3,7 +3,11 @@ package {{.Config.Output.Structure.handler}}
 import (
 	"net/http"
 	"strconv"
-	{{if .Config.Features.Logging.Enabled}}"log"{{end}}
+	{{if .Config.Features.Logging.Enabled}}
+	// Assume a structured logger is used, replace with actual import path
+	// "github.com/sirupsen/logrus" 
+	"log" // Kept original conditional import, but it's likely wrong for Infof/Errorf
+	{{end}}
 
 	"{{.Config.Model.Package}}/models"
 	{{if .Config.Features.Service}}"{{.Config.Output.BasePackage}}/{{.Config.Output.Structure.service}}"{{end}}
@@ -22,20 +26,31 @@ type {{.Name}}Handler struct {
 	{{if .Config.Features.Validation}}
 	validate *validator.Validate
 	{{end}}
+	{{if .Config.Features.Logging.Enabled}}
+	// The type of 'logger' depends on your chosen logging library (e.g., *logrus.Entry or a custom interface)
+	logger interface{ 
+		Infof(format string, args ...interface{})
+		Errorf(format string, args ...interface{}) 
+	}
+	{{end}}
 }
 
 {{if .Config.Features.Service}}
-func New{{.Name}}Handler(service {{.Config.Output.Structure.service}}.{{.Name}}Service) *{{.Name}}Handler {
+// Note: You must update the New{{.Name}}Handler to accept and set the logger
+func New{{.Name}}Handler(service {{.Config.Output.Structure.service}}.{{.Name}}Service {{if .Config.Features.Logging.Enabled}}, logger interface{ Infof(format string, args ...interface{}) Errorf(format string, args ...interface{}) }{{end}}) *{{.Name}}Handler {
 	return &{{.Name}}Handler{
 		service: service,
 		{{if .Config.Features.Validation}}validate: validator.New(),{{end}}
+		{{if .Config.Features.Logging.Enabled}}logger: logger,{{end}}
 	}
 }
 {{else}}
-func New{{.Name}}Handler(db *gorm.DB) *{{.Name}}Handler {
+// Note: You must update the New{{.Name}}Handler to accept and set the logger
+func New{{.Name}}Handler(db *gorm.DB {{if .Config.Features.Logging.Enabled}}, logger interface{ Infof(format string, args ...interface{}) Errorf(format string, args ...interface{}) }{{end}}) *{{.Name}}Handler {
 	return &{{.Name}}Handler{
 		db: db,
 		{{if .Config.Features.Validation}}validate: validator.New(),{{end}}
+		{{if .Config.Features.Logging.Enabled}}logger: logger,{{end}}
 	}
 }
 {{end}}
@@ -54,13 +69,13 @@ func New{{.Name}}Handler(db *gorm.DB) *{{.Name}}Handler {
 // @Router {{.Config.API.Prefix}}/{{.LowerName}}s [post]
 func (h *{{.Name}}Handler) Create{{.Name}}(c *gin.Context) {
 	{{if .Config.Features.Logging.Enabled}}
-	log.Printf("[Handler] Create{{.Name}} called")
+	h.logger.Infof("[Handler] Create{{.Name}} called")
 	{{end}}
 
 	var {{if .Config.Features.DTO}}req dto.Create{{.Name}}Request{{else}}{{.LowerName}} models.{{.Name}}{{end}}
 	if err := c.ShouldBindJSON(&{{if .Config.Features.DTO}}req{{else}}{{.LowerName}}{{end}}); err != nil {
 		{{if .Config.Features.Logging.Enabled}}
-		log.Printf("[Handler] Bind error: %v", err)
+		h.logger.Errorf("[Handler] Bind JSON error: %v", err)
 		{{end}}
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code": 400,
@@ -72,6 +87,9 @@ func (h *{{.Name}}Handler) Create{{.Name}}(c *gin.Context) {
 
 	{{if .Config.Features.Validation}}
 	if err := h.validate.Struct({{if .Config.Features.DTO}}req{{else}}{{.LowerName}}{{end}}); err != nil {
+		{{if .Config.Features.Logging.Enabled}}
+		h.logger.Errorf("[Handler] Validation error: %v", err)
+		{{end}}
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code": 400,
 			"message": "Validation failed",
@@ -85,7 +103,7 @@ func (h *{{.Name}}Handler) Create{{.Name}}(c *gin.Context) {
 	{{.LowerName}}, err := h.service.Create(c.Request.Context(), &{{if .Config.Features.DTO}}req{{else}}{{.LowerName}}{{end}})
 	if err != nil {
 		{{if .Config.Features.Logging.Enabled}}
-		log.Printf("[Handler] Service error: %v", err)
+		h.logger.Errorf("[Handler] Service error: %v", err)
 		{{end}}
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code": 500,
@@ -96,6 +114,9 @@ func (h *{{.Name}}Handler) Create{{.Name}}(c *gin.Context) {
 	}
 	{{else}}
 	if err := h.db.Create(&{{.LowerName}}).Error; err != nil {
+		{{if .Config.Features.Logging.Enabled}}
+		h.logger.Errorf("[Handler] DB create error: %v", err)
+		{{end}}
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code": 500,
 			"message": "Failed to create {{.LowerName}}",
@@ -126,8 +147,15 @@ func (h *{{.Name}}Handler) Create{{.Name}}(c *gin.Context) {
 // @Failure 500 {object} map[string]interface{} "服务器错误"
 // @Router {{.Config.API.Prefix}}/{{.LowerName}}s/{id} [get]
 func (h *{{.Name}}Handler) Get{{.Name}}(c *gin.Context) {
+	{{if .Config.Features.Logging.Enabled}}
+	h.logger.Infof("[Handler] Get{{.Name}} called")
+	{{end}}
+
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
+		{{if .Config.Features.Logging.Enabled}}
+		h.logger.Errorf("[Handler] Invalid ID format error: %v", err)
+		{{end}}
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code": 400,
 			"message": "Invalid ID format",
@@ -146,6 +174,9 @@ func (h *{{.Name}}Handler) Get{{.Name}}(c *gin.Context) {
 			message = "{{.Name}} not found"
 		}
 
+		{{if .Config.Features.Logging.Enabled}}
+		h.logger.Errorf("[Handler] Service GetByID error: %v", err)
+		{{end}}
 		c.JSON(statusCode, gin.H{
 			"code": statusCode,
 			"message": message,
@@ -156,12 +187,18 @@ func (h *{{.Name}}Handler) Get{{.Name}}(c *gin.Context) {
 	var {{.LowerName}} models.{{.Name}}
 	if err := h.db.First(&{{.LowerName}}, id).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
+			{{if .Config.Features.Logging.Enabled}}
+			h.logger.Infof("[Handler] {{.Name}} not found for ID: %d", id)
+			{{end}}
 			c.JSON(http.StatusNotFound, gin.H{
 				"code": 404,
 				"message": "{{.Name}} not found",
 			})
 			return
 		}
+		{{if .Config.Features.Logging.Enabled}}
+		h.logger.Errorf("[Handler] DB GetByID error: %v", err)
+		{{end}}
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code": 500,
 			"message": "Failed to get {{.LowerName}}",
@@ -195,9 +232,16 @@ func (h *{{.Name}}Handler) Get{{.Name}}(c *gin.Context) {
 // @Failure 500 {object} map[string]interface{} "服务器错误"
 // @Router {{.Config.API.Prefix}}/{{.LowerName}}s [get]
 func (h *{{.Name}}Handler) List{{.PluralName}}(c *gin.Context) {
+	{{if .Config.Features.Logging.Enabled}}
+	h.logger.Infof("[Handler] List{{.Name}} called")
+	{{end}}
+
 	{{if .Config.Features.DTO}}
 	var req dto.List{{.Name}}Request
 	if err := c.ShouldBindQuery(&req); err != nil {
+		{{if .Config.Features.Logging.Enabled}}
+		h.logger.Errorf("[Handler] Bind Query error: %v", err)
+		{{end}}
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code": 400,
 			"message": "Invalid query parameters",
@@ -253,6 +297,9 @@ func (h *{{.Name}}Handler) List{{.PluralName}}(c *gin.Context) {
 	{{end}}
 
 	if err := query.Count(&total).Error; err != nil {
+		{{if .Config.Features.Logging.Enabled}}
+		h.logger.Errorf("[Handler] DB count error: %v", err)
+		{{end}}
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code": 500,
 			"message": "Failed to count {{.LowerName}}s",
@@ -266,6 +313,9 @@ func (h *{{.Name}}Handler) List{{.PluralName}}(c *gin.Context) {
 	{{end}}
 
 	if err != nil {
+		{{if .Config.Features.Logging.Enabled}}
+		h.logger.Errorf("[Handler] List operation error: %v", err)
+		{{end}}
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code": 500,
 			"message": "Failed to list {{.LowerName}}s",
@@ -305,8 +355,14 @@ func (h *{{.Name}}Handler) List{{.PluralName}}(c *gin.Context) {
 // @Failure 500 {object} map[string]interface{} "服务器错误"
 // @Router {{.Config.API.Prefix}}/{{.LowerName}}s/{id} [put]
 func (h *{{.Name}}Handler) Update{{.Name}}(c *gin.Context) {
+	{{if .Config.Features.Logging.Enabled}}
+	h.logger.Infof("[Handler] Update{{.Name}} called")
+	{{end}}
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
+		{{if .Config.Features.Logging.Enabled}}
+		h.logger.Errorf("[Handler] Invalid ID format error: %v", err)
+		{{end}}
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code": 400,
 			"message": "Invalid ID format",
@@ -316,6 +372,9 @@ func (h *{{.Name}}Handler) Update{{.Name}}(c *gin.Context) {
 
 	var {{if .Config.Features.DTO}}req dto.Update{{.Name}}Request{{else}}{{.LowerName}} models.{{.Name}}{{end}}
 	if err := c.ShouldBindJSON(&{{if .Config.Features.DTO}}req{{else}}{{.LowerName}}{{end}}); err != nil {
+		{{if .Config.Features.Logging.Enabled}}
+		h.logger.Errorf("[Handler] Bind JSON error: %v", err)
+		{{end}}
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code": 400,
 			"message": "Invalid request",
@@ -326,6 +385,9 @@ func (h *{{.Name}}Handler) Update{{.Name}}(c *gin.Context) {
 
 	{{if .Config.Features.Validation}}
 	if err := h.validate.Struct({{if .Config.Features.DTO}}req{{else}}{{.LowerName}}{{end}}); err != nil {
+		{{if .Config.Features.Logging.Enabled}}
+		h.logger.Errorf("[Handler] Validation error: %v", err)
+		{{end}}
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code": 400,
 			"message": "Validation failed",
@@ -346,6 +408,9 @@ func (h *{{.Name}}Handler) Update{{.Name}}(c *gin.Context) {
 			message = "{{.Name}} not found"
 		}
 
+		{{if .Config.Features.Logging.Enabled}}
+		h.logger.Errorf("[Handler] Service Update error: %v", err)
+		{{end}}
 		c.JSON(statusCode, gin.H{
 			"code": statusCode,
 			"message": message,
@@ -356,12 +421,18 @@ func (h *{{.Name}}Handler) Update{{.Name}}(c *gin.Context) {
 	var {{.LowerName}} models.{{.Name}}
 	if err := h.db.First(&{{.LowerName}}, id).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
+			{{if .Config.Features.Logging.Enabled}}
+			h.logger.Infof("[Handler] {{.Name}} not found for ID: %d", id)
+			{{end}}
 			c.JSON(http.StatusNotFound, gin.H{
 				"code": 404,
 				"message": "{{.Name}} not found",
 			})
 			return
 		}
+		{{if .Config.Features.Logging.Enabled}}
+		h.logger.Errorf("[Handler] DB find before update error: %v", err)
+		{{end}}
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code": 500,
 			"message": "Failed to find {{.LowerName}}",
@@ -371,6 +442,9 @@ func (h *{{.Name}}Handler) Update{{.Name}}(c *gin.Context) {
 	}
 
 	if err := h.db.Model(&{{.LowerName}}).Updates(&{{.LowerName}}).Error; err != nil {
+		{{if .Config.Features.Logging.Enabled}}
+		h.logger.Errorf("[Handler] DB update error: %v", err)
+		{{end}}
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code": 500,
 			"message": "Failed to update {{.LowerName}}",
@@ -401,8 +475,15 @@ func (h *{{.Name}}Handler) Update{{.Name}}(c *gin.Context) {
 // @Failure 500 {object} map[string]interface{} "服务器错误"
 // @Router {{.Config.API.Prefix}}/{{.LowerName}}s/{id} [delete]
 func (h *{{.Name}}Handler) Delete{{.Name}}(c *gin.Context) {
+	{{if .Config.Features.Logging.Enabled}}
+	h.logger.Infof("[Handler] Delete{{.Name}} called")
+	{{end}}
+
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
+		{{if .Config.Features.Logging.Enabled}}
+		h.logger.Errorf("[Handler] Invalid ID format error: %v", err)
+		{{end}}
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code": 400,
 			"message": "Invalid ID format",
@@ -412,6 +493,9 @@ func (h *{{.Name}}Handler) Delete{{.Name}}(c *gin.Context) {
 
 	{{if .Config.Features.Service}}
 	if err := h.service.Delete(c.Request.Context(), uint(id)); err != nil {
+		{{if .Config.Features.Logging.Enabled}}
+		h.logger.Errorf("[Handler] Service delete error: %v", err)
+		{{end}}
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code": 500,
 			"message": "Failed to delete {{.LowerName}}",
@@ -425,6 +509,9 @@ func (h *{{.Name}}Handler) Delete{{.Name}}(c *gin.Context) {
 	{{else}}
 	if err := h.db.Unscoped().Delete(&models.{{.Name}}{}, id).Error; err != nil {
 	{{end}}
+		{{if .Config.Features.Logging.Enabled}}
+		h.logger.Errorf("[Handler] DB delete error: %v", err)
+		{{end}}
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code": 500,
 			"message": "Failed to delete {{.LowerName}}",
@@ -454,8 +541,15 @@ func (h *{{.Name}}Handler) Delete{{.Name}}(c *gin.Context) {
 // @Failure 500 {object} map[string]interface{} "服务器错误"
 // @Router {{.Config.API.Prefix}}/{{.LowerName}}s/batch [post]
 func (h *{{.Name}}Handler) BatchCreate{{.PluralName}}(c *gin.Context) {
+	{{if .Config.Features.Logging.Enabled}}
+	h.logger.Infof("[Handler] Batch create {{.Name}} called")
+	{{end}}
+
 	var {{.LowerName}}s []*models.{{.Name}}
 	if err := c.ShouldBindJSON(&{{.LowerName}}s); err != nil {
+		{{if .Config.Features.Logging.Enabled}}
+		h.logger.Errorf("[Handler] Bind JSON error (batch create): %v", err)
+		{{end}}
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code": 400,
 			"message": "Invalid request",
@@ -466,8 +560,14 @@ func (h *{{.Name}}Handler) BatchCreate{{.PluralName}}(c *gin.Context) {
 
 	{{if .Config.Features.Service}}
 	if err := h.service.BatchCreate(c.Request.Context(), {{.LowerName}}s); err != nil {
+		{{if .Config.Features.Logging.Enabled}}
+		h.logger.Errorf("[Handler] Service batch create error: %v", err)
+		{{end}}
 	{{else}}
 	if err := h.db.CreateInBatches({{.LowerName}}s, 100).Error; err != nil {
+		{{if .Config.Features.Logging.Enabled}}
+		h.logger.Errorf("[Handler] DB batch create error: %v", err)
+		{{end}}
 	{{end}}
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code": 500,
@@ -496,10 +596,16 @@ func (h *{{.Name}}Handler) BatchCreate{{.PluralName}}(c *gin.Context) {
 // @Failure 500 {object} map[string]interface{} "服务器错误"
 // @Router {{.Config.API.Prefix}}/{{.LowerName}}s/batch [delete]
 func (h *{{.Name}}Handler) BatchDelete{{.PluralName}}(c *gin.Context) {
+	{{if .Config.Features.Logging.Enabled}}
+	h.logger.Infof("[Handler] Batch delete {{.Name}} called")
+	{{end}}
 	var req struct {
 		IDs []uint `json:"ids" binding:"required,min=1"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
+		{{if .Config.Features.Logging.Enabled}}
+		h.logger.Errorf("[Handler] Bind JSON error (batch delete): %v", err)
+		{{end}}
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code": 400,
 			"message": "Invalid request",
@@ -510,8 +616,14 @@ func (h *{{.Name}}Handler) BatchDelete{{.PluralName}}(c *gin.Context) {
 
 	{{if .Config.Features.Service}}
 	if err := h.service.BatchDelete(c.Request.Context(), req.IDs); err != nil {
+		{{if .Config.Features.Logging.Enabled}}
+		h.logger.Errorf("[Handler] Service batch delete error: %v", err)
+		{{end}}
 	{{else}}
 	if err := h.db.Delete(&models.{{.Name}}{}, req.IDs).Error; err != nil {
+		{{if .Config.Features.Logging.Enabled}}
+		h.logger.Errorf("[Handler] DB batch delete error: %v", err)
+		{{end}}
 	{{end}}
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code": 500,
@@ -541,11 +653,17 @@ func (h *{{.Name}}Handler) BatchDelete{{.PluralName}}(c *gin.Context) {
 // @Failure 500 {object} map[string]interface{} "服务器错误"
 // @Router {{.Config.API.Prefix}}/{{.LowerName}}s/export [get]
 func (h *{{.Name}}Handler) Export{{.PluralName}}(c *gin.Context) {
+	{{if .Config.Features.Logging.Enabled}}
+	h.logger.Infof("[Handler] Export {{.Name}} called")
+	{{end}}
 	format := c.DefaultQuery("format", "csv")
 	
 	{{if .Config.Features.Service}}
 	data, err := h.service.Export(c.Request.Context(), format)
 	if err != nil {
+		{{if .Config.Features.Logging.Enabled}}
+		h.logger.Errorf("[Handler] Service export error: %v", err)
+		{{end}}
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code": 500,
 			"message": "Failed to export data",
@@ -555,6 +673,9 @@ func (h *{{.Name}}Handler) Export{{.PluralName}}(c *gin.Context) {
 	}
 	{{else}}
 	// TODO: Implement export logic
+	{{if .Config.Features.Logging.Enabled}}
+	h.logger.Errorf("[Handler] Export feature not implemented for non-service mode")
+	{{end}}
 	c.JSON(http.StatusNotImplemented, gin.H{
 		"code": 501,
 		"message": "Export feature not implemented",
