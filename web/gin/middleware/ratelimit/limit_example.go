@@ -19,16 +19,19 @@ import (
 //    - 适用：所有请求，按 IP 独立计数
 //    - 示例：WithIPLimit(100, time.Second) // 每个 IP 每秒最多 100 次请求
 //
-// 3. 方法限流 (WithMethodLimit)
+// 3. 方法限流 (WithMethodLimit) 每个IP独立计算
 //    - 作用：限制特定 HTTP 方法的请求量
 //    - 适用：POST、PUT、DELETE 等写操作
 //    - 示例：WithMethodLimit([]string{"POST", "DELETE"}, 10, time.Second)
 //
-// 4. 路由限流 (WithRouteLimit)
-//    - 作用：限制特定路由的请求量
+// 4. 路由限流 (WithRouteLimit) 每个IP独立计算
+//    - 作用：限制特定路由的请求量，支持指定 HTTP 方法
 //    - 适用：敏感操作，如上传、登录、注册
-//    - 示例：WithRouteLimit("/api/v1/files/upload", 1, time.Second)
-//    - 支持通配符：WithRouteLimit("/api/v1/admin/*", 10, time.Second)
+//    - 示例：
+//      WithRouteLimit("/api/v1/files/upload", 1, time.Second, "POST")  // 只限制 POST
+//      WithRouteLimit("/api/v1/admin/settings", 10, time.Second, "*")  // 限制所有方法
+//      WithRouteLimit("/api/v1/admin/*", 10, time.Second, "POST", "DELETE") // 只限制 POST 和 DELETE
+//    - 如果不指定方法参数或传 "*"，则限制所有 HTTP 方法
 //
 // 5. 优先级顺序（按检查顺序）
 //    全局限流 -> 方法限流 -> 路由限流 -> IP 限流
@@ -114,23 +117,33 @@ func Example4_MethodLimit() {
 func Example5_RouteLimit() {
 	r := gin.New()
 
-	// 对上传接口进行严格限流
+	// 对上传接口进行严格限流，指定 HTTP 方法
 	r.Use(NewBuilder().
-		WithRouteLimit("/api/v1/files/upload", 1, time.Second).  // 文件上传每秒 1 次
-		WithRouteLimit("/api/v1/images/upload", 1, time.Second). // 图片上传每秒 1 次
+		WithRouteLimit("/api/v1/files/upload", 1, time.Second, "POST").  // 只限制 POST 请求
+		WithRouteLimit("/api/v1/images/upload", 1, time.Second, "POST"). // 只限制 POST 请求
+		WithRouteLimit("/api/v1/users/profile", 5, time.Second, "PUT").  // 只限制 PUT 请求
+		WithRouteLimit("/api/v1/admin/settings", 10, time.Second, "*").  // 限制所有方法
 		WithCleanup(1 * time.Minute).
 		Middleware())
 
 	r.POST("/api/v1/files/upload", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"message": "file uploaded"})
+		c.JSON(http.StatusOK, gin.H{"message": "file uploaded"}) // 受限：每秒 1 次
 	})
 
 	r.POST("/api/v1/images/upload", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"message": "image uploaded"})
+		c.JSON(http.StatusOK, gin.H{"message": "image uploaded"}) // 受限：每秒 1 次
 	})
 
-	r.GET("/api/v1/files/list", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"message": "success"}) // 不受限制
+	r.GET("/api/v1/files/upload", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"message": "upload form"}) // 不受限（只限制了 POST）
+	})
+
+	r.PUT("/api/v1/users/profile", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"message": "profile updated"}) // 受限：每秒 5 次
+	})
+
+	r.GET("/api/v1/admin/settings", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"message": "settings"}) // 受限：每秒 10 次（所有方法）
 	})
 
 	r.Run(":8080")
@@ -142,16 +155,25 @@ func Example6_RoutePrefixLimit() {
 
 	// 限制所有 /api/v1/admin/ 下的请求
 	r.Use(NewBuilder().
-		WithRouteLimit("/api/v1/admin/*", 10, time.Second). // 管理接口每秒 10 次
+		WithRouteLimit("/api/v1/admin/*", 10, time.Second, "*").          // 所有方法
+		WithRouteLimit("/api/v1/write/*", 5, time.Second, "POST", "PUT"). // 只限制写操作
 		WithCleanup(1 * time.Minute).
 		Middleware())
 
 	r.GET("/api/v1/admin/users", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"message": "users"}) // 受限
+		c.JSON(http.StatusOK, gin.H{"message": "users"}) // 受限：每秒 10 次
 	})
 
-	r.GET("/api/v1/admin/settings", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"message": "settings"}) // 受限
+	r.POST("/api/v1/admin/settings", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"message": "settings"}) // 受限：每秒 10 次
+	})
+
+	r.POST("/api/v1/write/article", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"message": "article created"}) // 受限：每秒 5 次
+	})
+
+	r.GET("/api/v1/write/article", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"message": "article list"}) // 不受限（只限制了 POST/PUT）
 	})
 
 	r.GET("/api/v1/public/data", func(c *gin.Context) {
@@ -170,8 +192,8 @@ func Example7_CombinedLimits() {
 		WithGlobalLimit(1000, time.Second).                                  // 服务器总请求：每秒 1000 次
 		WithIPLimit(100, time.Second).                                       // 每个 IP：每秒 100 次
 		WithMethodLimit([]string{"POST", "PUT", "DELETE"}, 10, time.Second). // 写操作：每秒 10 次
-		WithRouteLimit("/api/v1/files/upload", 1, time.Second).              // 文件上传：每秒 1 次
-		WithRouteLimit("/api/v1/images/upload", 1, time.Second).             // 图片上传：每秒 1 次
+		WithRouteLimit("/api/v1/files/upload", 1, time.Second, "POST").      // 文件上传：每秒 1 次（仅 POST）
+		WithRouteLimit("/api/v1/images/upload", 1, time.Second, "POST").     // 图片上传：每秒 1 次（仅 POST）
 		WithCleanup(1 * time.Minute)
 
 	// 全局使用
@@ -265,7 +287,7 @@ func Example9_LayeredLimits() {
 	{
 		// 3. 上传接口的严格限流
 		uploadLimiter := NewBuilder().
-			WithRouteLimit("/api/v1/files/upload", 1, time.Second).
+			WithRouteLimit("/api/v1/files/upload", 1, time.Second, "POST").
 			WithCleanup(1 * time.Minute)
 
 		files := api.Group("/files")
@@ -304,11 +326,12 @@ func Example10_RealWorldUsage() {
 		WithIPLimit(100, time.Second).
 		// 写操作限流：保护数据库和存储
 		WithMethodLimit([]string{"POST", "PUT", "DELETE"}, 20, time.Second).
-		// 敏感操作限流
-		WithRouteLimit("/api/v1/auth/login", 5, time.Minute).     // 登录：5次/分钟
-		WithRouteLimit("/api/v1/auth/register", 3, time.Minute).  // 注册：3次/分钟
-		WithRouteLimit("/api/v1/files/upload", 10, time.Minute).  // 上传：10次/分钟
-		WithRouteLimit("/api/v1/images/upload", 10, time.Minute). // 图片上传：10次/分钟
+		// 敏感操作限流（指定 HTTP 方法）
+		WithRouteLimit("/api/v1/auth/login", 5, time.Minute, "POST").     // 登录：5次/分钟
+		WithRouteLimit("/api/v1/auth/register", 3, time.Minute, "POST").  // 注册：3次/分钟
+		WithRouteLimit("/api/v1/files/upload", 10, time.Minute, "POST").  // 上传：10次/分钟
+		WithRouteLimit("/api/v1/images/upload", 10, time.Minute, "POST"). // 图片上传：10次/分钟
+		WithRouteLimit("/api/v1/admin/*", 30, time.Minute, "*").          // 管理接口：30次/分钟（所有方法）
 		// 自定义错误处理
 		WithIPErrorHandler(func(c *gin.Context) {
 			c.JSON(http.StatusTooManyRequests, gin.H{

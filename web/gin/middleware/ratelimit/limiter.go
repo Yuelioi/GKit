@@ -28,6 +28,9 @@ type Builder struct {
 	// 方法级别限流规则（如只限制 POST/DELETE）
 	methodRules map[string]*MethodRule
 
+	// 全局路由限流（所有 IP 共享）
+	globalRouteRules map[string]*rate.Limiter
+
 	cleanupInterval time.Duration
 
 	// 自定义限流错误处理
@@ -55,6 +58,7 @@ type RouteRule struct {
 	Max      int           // 每个 IP 在该路由下的最大请求数
 	Interval time.Duration // 时间窗口
 	Pattern  string        // 路由匹配模式（支持前缀匹配）
+	Methods  []string      // 限制的 HTTP 方法，空或包含 "*" 表示所有方法
 }
 
 // MethodRule 方法级别的限流规则
@@ -75,11 +79,12 @@ func Default() gin.HandlerFunc {
 
 func NewBuilder() *Builder {
 	return &Builder{
-		clients:       make(map[string]*client),
-		routeClients:  make(map[string]map[string]*client),
-		methodClients: make(map[string]map[string]*client),
-		routeRules:    make(map[string]*RouteRule),
-		methodRules:   make(map[string]*MethodRule),
+		clients:          make(map[string]*client),
+		routeClients:     make(map[string]map[string]*client),
+		methodClients:    make(map[string]map[string]*client),
+		routeRules:       make(map[string]*RouteRule),
+		methodRules:      make(map[string]*MethodRule),
+		globalRouteRules: make(map[string]*rate.Limiter),
 		// 默认错误处理
 		IPErrorHandler: func(c *gin.Context) {
 			c.JSON(http.StatusTooManyRequests, gin.H{
@@ -136,13 +141,20 @@ func (rl *Builder) WithGlobalLimit(max int, interval time.Duration) *Builder {
 }
 
 // WithRouteLimit 为特定路由设置限流
-// pattern 支持前缀匹配，如 "/api/v1/files/upload" 或 "/api/v1/images/"
-func (rl *Builder) WithRouteLimit(pattern string, max int, interval time.Duration) *Builder {
+// pattern 支持前缀匹配，如 "/api/v1/files/upload" 或 "/api/v1/images/*"
+// methods 指定限制的 HTTP 方法，如 []string{"POST"}，空或 []string{"*"} 表示所有方法
+func (rl *Builder) WithRouteLimit(pattern string, max int, interval time.Duration, methods ...string) *Builder {
 	if max > 0 {
+		// 如果没有指定方法或者包含 "*"，则表示所有方法
+		if len(methods) == 0 {
+			methods = []string{"*"}
+		}
+
 		rl.routeRules[pattern] = &RouteRule{
 			Max:      max,
 			Interval: interval,
 			Pattern:  pattern,
+			Methods:  methods,
 		}
 	}
 	return rl
@@ -237,7 +249,7 @@ func (rl *Builder) Middleware() gin.HandlerFunc {
 		// 3. 路由级别限流
 		if len(rl.routeRules) > 0 {
 			for pattern, rule := range rl.routeRules {
-				if rl.matchRoute(path, pattern) {
+				if rl.matchRoute(path, pattern) && rl.matchRouteMethod(method, rule.Methods) {
 					if !rl.checkRouteLimit(ip, pattern, rule) {
 						rl.RouteErrorHandler(c)
 						return
@@ -334,7 +346,21 @@ func (rl *Builder) matchRoute(path, pattern string) bool {
 // matchMethod 匹配 HTTP 方法
 func (rl *Builder) matchMethod(method string, methods []string) bool {
 	for _, m := range methods {
-		if strings.EqualFold(method, m) {
+		if m == "*" || strings.EqualFold(method, m) {
+			return true
+		}
+	}
+	return false
+}
+
+// matchRouteMethod 匹配路由规则的 HTTP 方法
+func (rl *Builder) matchRouteMethod(method string, methods []string) bool {
+	// 如果 methods 为空或包含 "*"，匹配所有方法
+	if len(methods) == 0 {
+		return true
+	}
+	for _, m := range methods {
+		if m == "*" || strings.EqualFold(method, m) {
 			return true
 		}
 	}
