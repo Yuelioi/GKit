@@ -12,7 +12,7 @@ type Response struct {
 	Data      any    `json:"data,omitempty"`       // 响应数据
 	RequestID string `json:"request_id,omitempty"` // 请求追踪ID (用于链路追踪和日志关联)
 	Timestamp int64  `json:"timestamp"`            // 时间戳（毫秒级）
-	Error     string `json:"error,omitempty"`      // 详细错误/底层错误堆栈（可选，只用于内部调试，不应透传给用户）
+	Error     string `json:"-"`                    // 详细错误/底层错误堆栈（可选，只用于内部调试，不应透传给用户）
 }
 
 // 统一状态码常量
@@ -176,6 +176,14 @@ func (r *Response) WithTimestamp() *Response {
 func (r *Response) WithError(err error) *Response {
 	if err != nil {
 		r.Error = err.Error()
+	}
+	return r
+}
+
+// WithMessage 添加自定义消息
+func (r *Response) WithMessage(message string) *Response {
+	if message != "" {
+		r.Message = message
 	}
 	return r
 }
