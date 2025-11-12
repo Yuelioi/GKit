@@ -268,6 +268,18 @@ func FailWithError(codeInfo CodeInfo, err error) *Response {
 	return resp
 }
 
+// ---------- 常用通用响应 ----------
+
+// 参数缺失
+func InvalidParamResponse() *Response {
+	return newResponse(InvalidParam, InvalidParam.Message, nil)
+}
+
+// 操作失败
+func OperationFailedResponse() *Response {
+	return newResponse(OperationFailed, OperationFailed.Message, nil)
+}
+
 // ---------- 便捷方法 ----------
 
 // NotFoundWithResource 资源不存在（可指定资源名称）
