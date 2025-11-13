@@ -7,7 +7,9 @@ require (
 	github.com/gin-contrib/static v1.1.5
 	github.com/gin-gonic/gin v1.11.0
 	github.com/goccy/go-yaml v1.18.0
+	github.com/google/uuid v1.6.0
 	github.com/rs/zerolog v1.34.0
+	golang.org/x/text v0.27.0
 	golang.org/x/time v0.13.0
 )
 
@@ -40,7 +42,6 @@ require (
 	golang.org/x/net v0.42.0 // indirect
 	golang.org/x/sync v0.16.0 // indirect
 	golang.org/x/sys v0.35.0 // indirect
-	golang.org/x/text v0.27.0 // indirect
 	golang.org/x/tools v0.34.0 // indirect
 	google.golang.org/protobuf v1.36.9 // indirect
 )
