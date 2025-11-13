@@ -1,4 +1,4 @@
-package gzero
+package gormx
 
 import (
 	"context"
