@@ -2,351 +2,382 @@ package response_test
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"testing"
 
 	"github.com/Yuelioi/gkit/web/response"
 )
 
-// mockJSON 模拟 Gin 的 c.JSON 函数
-func mockJSON(status int, resp *response.Response) {
-	fmt.Printf("HTTP Status: %d\n", status)
+// ========== 测试数据结构 ==========
+
+type User struct {
+	ID       int    `json:"id"`
+	Username string `json:"username"`
+	Email    string `json:"email"`
+	Age      int    `json:"age"`
+}
+
+type Article struct {
+	ID      int    `json:"id"`
+	Title   string `json:"title"`
+	Content string `json:"content"`
+	Author  string `json:"author"`
+}
+
+// ========== 辅助函数 ==========
+
+// printResponse 格式化输出响应
+func printResponse(title string, resp *response.Response) {
+	fmt.Printf("\n【%s】\n", title)
+	fmt.Printf("HTTP Status: %d\n", resp.Status())
 	b, _ := json.MarshalIndent(resp, "", "  ")
 	fmt.Println(string(b))
 	fmt.Println("--------------------------------------------------")
 }
 
-func TestSuccessResponse(t *testing.T) {
-	fmt.Println("========== 成功响应示例 ==========")
+// ========== 成功响应测试 ==========
 
-	// 1. 返回数据
-	userData := map[string]interface{}{
-		"id":       123,
-		"username": "alice",
-		"email":    "alice@example.com",
+func TestSuccessResponses(t *testing.T) {
+	fmt.Println("\n========== 成功响应示例 ==========")
+
+	// 1. 返回对象数据
+	user := User{
+		ID:       1,
+		Username: "张三",
+		Email:    "zhangsan@example.com",
+		Age:      25,
 	}
-	resp := response.OK(userData).WithRequestID("req-001")
-	mockJSON(resp.HTTPStatus(), resp)
+	printResponse("成功返回用户数据", response.Data(user))
 
 	// 2. 返回列表数据
-	listData := []map[string]interface{}{
-		{"id": 1, "name": "Item 1"},
-		{"id": 2, "name": "Item 2"},
+	users := []User{
+		{ID: 1, Username: "张三", Email: "zhangsan@example.com", Age: 25},
+		{ID: 2, Username: "李四", Email: "lisi@example.com", Age: 30},
+		{ID: 3, Username: "王五", Email: "wangwu@example.com", Age: 28},
 	}
-	resp = response.OK(listData).WithRequestID("req-002")
-	mockJSON(resp.HTTPStatus(), resp)
+	printResponse("成功返回用户列表", response.Data(users))
 
-	// 3. 成功但无返回数据（如删除操作）
-	resp = response.OKWithNoContent().WithRequestID("req-003")
-	mockJSON(resp.HTTPStatus(), resp)
+	// 3. 分页数据
+	printResponse("分页查询结果",
+		response.Page(users, 100, 1, 10))
 
-	// 4. 自定义成功消息
-	resp = response.OKWithMsg("注册成功，请查收验证邮件", map[string]string{
-		"email": "alice@example.com",
-	}).WithRequestID("req-004")
-	mockJSON(resp.HTTPStatus(), resp)
+	// 4. 创建资源成功 (201)
+	newUser := User{ID: 4, Username: "赵六", Email: "zhaoliu@example.com", Age: 22}
+	printResponse("创建用户成功", response.Created(newUser))
+
+	// 5. 删除成功 (204 无内容)
+	printResponse("删除成功", response.NoContent())
+
+	// 6. 自定义消息
+	printResponse("更新成功(自定义消息)",
+		response.Data(user).WithMessage("用户信息更新成功"))
+
+	// 7. 带请求ID
+	printResponse("带请求追踪ID",
+		response.Data(user).WithRequestID("req-abc123xyz"))
+
+	// 8. 链式调用
+	printResponse("链式调用示例",
+		response.Data(user).
+			WithMessage("查询成功").
+			WithRequestID("req-chain-001"))
+
+	// 9. 空数据成功
+	printResponse("成功但无数据", response.OK())
+
+	// 10. 返回简单类型
+	printResponse("返回字符串", response.Data("操作执行成功"))
+	printResponse("返回数字", response.Data(42))
+	printResponse("返回布尔值", response.Data(true))
+	printResponse("返回Map", response.Data(map[string]any{
+		"total_users":  1000,
+		"active_users": 856,
+		"growth_rate":  12.5,
+	}))
 }
 
-func TestClientErrorResponse(t *testing.T) {
-	fmt.Println("\n========== 客户端错误响应示例 ==========")
+// ========== 错误响应测试 ==========
 
-	// 1. 参数错误 - 使用默认消息
-	resp := response.Fail(response.InvalidParam).WithRequestID("req-101")
-	mockJSON(resp.HTTPStatus(), resp)
+func TestErrorResponses(t *testing.T) {
+	fmt.Println("\n========== 错误响应示例 ==========")
 
-	// 2. 参数错误 - 指定字段名
-	resp = response.InvalidParamWithField("email").WithRequestID("req-102")
-	mockJSON(resp.HTTPStatus(), resp)
+	// 1. 通用错误
+	printResponse("通用错误", response.Error("操作失败"))
 
-	// 3. 参数错误 - 自定义消息
-	resp = response.FailWithMsg(response.InvalidParam, "邮箱格式不正确，请输入有效的邮箱地址").
-		WithRequestID("req-103")
-	mockJSON(resp.HTTPStatus(), resp)
+	// 2. 参数错误 (400)
+	printResponse("参数错误", response.BadRequest("用户名不能为空"))
+	printResponse("参数错误(默认消息)", response.BadRequest(""))
 
-	// 4. 缺少必填参数
-	resp = response.MissingParamWithField("password").WithRequestID("req-104")
-	mockJSON(resp.HTTPStatus(), resp)
+	// 3. 未授权 (401)
+	printResponse("未授权", response.Unauthorized("请先登录"))
+	printResponse("Token过期", response.Unauthorized("token已过期，请重新登录"))
 
-	// 5. 文件相关错误
-	resp = response.Fail(response.FileTooLarge).
-		WithMessage("文件大小不能超过10MB").
-		WithRequestID("req-105")
-	mockJSON(resp.HTTPStatus(), resp)
+	// 4. 禁止访问 (403)
+	printResponse("权限不足", response.Forbidden("您没有权限访问该资源"))
+	printResponse("禁止访问(默认消息)", response.Forbidden(""))
 
-	// 6. 请求频繁
-	resp = response.Fail(response.TooManyRequest).
-		WithMessage("您的操作过于频繁，请在60秒后重试").
-		WithRequestID("req-106")
-	mockJSON(resp.HTTPStatus(), resp)
+	// 5. 资源不存在 (404)
+	printResponse("资源不存在", response.NotFound("用户不存在"))
+	printResponse("接口不存在", response.NotFound("请求的接口不存在"))
 
-	// 7. 重复提交
-	resp = response.Fail(response.Duplicate).WithRequestID("req-107")
-	mockJSON(resp.HTTPStatus(), resp)
+	// 6. 服务器错误 (500)
+	printResponse("内部错误", response.InternalError("数据库连接失败"))
+	printResponse("内部错误(默认消息)", response.InternalError(""))
+
+	// 7. 服务不可用 (503)
+	printResponse("服务不可用", response.ServiceUnavailable("系统维护中"))
+	printResponse("服务不可用(默认)", response.ServiceUnavailable(""))
 }
 
-func TestAuthErrorResponse(t *testing.T) {
-	fmt.Println("\n========== 鉴权/权限错误响应示例 ==========")
+// ========== 业务错误测试 ==========
 
-	// 1. 未登录
-	resp := response.Fail(response.Unauthorized).WithRequestID("req-201")
-	mockJSON(resp.HTTPStatus(), resp)
+func TestBusinessErrors(t *testing.T) {
+	fmt.Println("\n========== 业务错误示例 ==========")
 
-	// 2. Token过期
-	resp = response.Fail(response.TokenExpired).
-		WithMessage("登录已过期，请重新登录以继续操作").
-		WithRequestID("req-202")
-	mockJSON(resp.HTTPStatus(), resp)
+	// 1. 通用业务错误
+	printResponse("业务错误", response.BusinessError("余额不足，无法完成支付"))
 
-	// 3. 权限不足
-	resp = response.FailWithMsg(response.Forbidden, "您没有删除该资源的权限").
-		WithRequestID("req-203")
-	mockJSON(resp.HTTPStatus(), resp)
+	// 2. 记录已存在
+	printResponse("记录已存在", response.RecordExists("用户名已被注册"))
+	printResponse("记录已存在(默认)", response.RecordExists(""))
 
-	// 4. 资源不存在
-	resp = response.NotFoundWithResource("订单").WithRequestID("req-204")
-	mockJSON(resp.HTTPStatus(), resp)
+	// 3. 记录不存在
+	printResponse("记录不存在", response.RecordNotFound("订单不存在"))
+	printResponse("记录不存在(默认)", response.RecordNotFound(""))
 
-	// 5. 账号被封禁
-	resp = response.Fail(response.AccountBanned).
-		WithMessage("您的账号因违规操作已被封禁，如有疑问请联系客服").
-		WithRequestID("req-205")
-	mockJSON(resp.HTTPStatus(), resp)
+	// 4. 操作失败
+	printResponse("操作失败", response.OperationFailed("发送邮件失败"))
+	printResponse("操作失败(默认)", response.OperationFailed(""))
 
-	// 6. IP被封禁
-	resp = response.Fail(response.IPBlocked).WithRequestID("req-206")
-	mockJSON(resp.HTTPStatus(), resp)
+	// 5. 自定义业务码
+	printResponse("自定义业务错误",
+		response.Custom(10086, "积分不足，无法兑换", 200))
 }
 
-func TestBusinessErrorResponse(t *testing.T) {
-	fmt.Println("\n========== 业务逻辑错误响应示例 ==========")
+// ========== 实际场景测试 ==========
 
-	// 1. 账号不存在
-	resp := response.Fail(response.AccountNotExist).WithRequestID("req-301")
-	mockJSON(resp.HTTPStatus(), resp)
+func TestRealWorldScenarios(t *testing.T) {
+	fmt.Println("\n========== 实际业务场景 ==========")
 
-	// 2. 密码错误（带尝试次数提示）
-	resp = response.FailWithMsg(response.PasswordError, "密码错误，您还有2次尝试机会").
-		WithRequestID("req-302")
-	mockJSON(resp.HTTPStatus(), resp)
+	// 场景1: 用户注册
+	fmt.Println("\n>>> 场景1: 用户注册")
+	newUser := User{ID: 100, Username: "newuser", Email: "new@example.com"}
 
-	// 3. 验证码错误
-	resp = response.Fail(response.VerifyCodeError).WithRequestID("req-303")
-	mockJSON(resp.HTTPStatus(), resp)
+	// 成功
+	printResponse("注册成功",
+		response.Created(newUser).WithMessage("注册成功，欢迎加入"))
 
-	// 4. 余额不足（带数据）
-	resp = response.FailWithData(response.InsufficientBalance, map[string]interface{}{
-		"balance":  50.00,
-		"required": 100.00,
-	}).WithRequestID("req-304")
-	mockJSON(resp.HTTPStatus(), resp)
+	// 失败 - 用户名已存在
+	printResponse("注册失败 - 用户名已存在",
+		response.RecordExists("用户名'newuser'已被注册"))
 
-	// 5. 库存不足
-	resp = response.FailWithMsg(response.InsufficientStock, "商品库存不足，仅剩5件").
-		WithRequestID("req-305")
-	mockJSON(resp.HTTPStatus(), resp)
-
-	// 6. 订单已支付
-	resp = response.Fail(response.OrderPaid).WithRequestID("req-306")
-	mockJSON(resp.HTTPStatus(), resp)
-
-	// 7. 配额用尽
-	resp = response.FailWithMsg(response.QuotaExceeded, "今日API调用次数已用尽，请明天再试或升级套餐").
-		WithRequestID("req-307")
-	mockJSON(resp.HTTPStatus(), resp)
-
-	// 8. 账号锁定
-	resp = response.Fail(response.AccountLocked).
-		WithMessage("密码错误次数过多，账号已锁定30分钟").
-		WithRequestID("req-308")
-	mockJSON(resp.HTTPStatus(), resp)
-}
-
-func TestServerErrorResponse(t *testing.T) {
-	fmt.Println("\n========== 服务器错误响应示例 ==========")
-
-	// 1. 内部错误（不暴露具体错误）
-	resp := response.Fail(response.InternalError).WithRequestID("req-401")
-	mockJSON(resp.HTTPStatus(), resp)
-
-	// 2. 内部错误（记录详细错误日志）
-	err := errors.New("database connection timeout: connection refused")
-	resp = response.FailWithError(response.DatabaseError, err).WithRequestID("req-402")
-	mockJSON(resp.HTTPStatus(), resp)
-	// 注意：resp.Error 字段不会返回给客户端（json:"-"），仅用于日志
-	if resp.Error != "" {
-		fmt.Printf("内部日志: %s\n", resp.Error)
-		fmt.Println("--------------------------------------------------")
+	// 场景2: 用户登录
+	fmt.Println("\n>>> 场景2: 用户登录")
+	loginData := map[string]any{
+		"token":      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+		"user":       User{ID: 1, Username: "张三", Email: "zhangsan@example.com"},
+		"expires_in": 7200,
 	}
 
-	// 3. 服务繁忙
-	resp = response.Fail(response.ServiceBusy).WithRequestID("req-403")
-	mockJSON(resp.HTTPStatus(), resp)
+	// 成功
+	printResponse("登录成功",
+		response.Data(loginData).WithMessage("登录成功"))
 
-	// 4. 远程调用失败
-	resp = response.FailWithMsg(response.RemoteCallError, "支付服务暂时不可用，请稍后重试").
-		WithRequestID("req-404")
-	mockJSON(resp.HTTPStatus(), resp)
+	// 失败 - 密码错误
+	printResponse("登录失败 - 密码错误",
+		response.Unauthorized("用户名或密码错误"))
 
-	// 5. 系统维护
-	resp = response.Fail(response.MaintenanceMode).
-		WithMessage("系统维护中(预计30分钟)，请稍后访问").
-		WithRequestID("req-405")
-	mockJSON(resp.HTTPStatus(), resp)
+	// 场景3: 获取用户详情
+	fmt.Println("\n>>> 场景3: 获取用户详情")
+	user := User{ID: 1, Username: "张三", Email: "zhangsan@example.com", Age: 25}
+
+	// 成功
+	printResponse("获取成功", response.Data(user))
+
+	// 失败 - 用户不存在
+	printResponse("获取失败 - 用户不存在",
+		response.NotFound("用户ID不存在"))
+
+	// 失败 - 未授权
+	printResponse("获取失败 - 未授权",
+		response.Unauthorized("请先登录"))
+
+	// 场景4: 分页查询文章列表
+	fmt.Println("\n>>> 场景4: 分页查询文章列表")
+	articles := []Article{
+		{ID: 1, Title: "Go语言入门", Content: "...", Author: "张三"},
+		{ID: 2, Title: "微服务架构", Content: "...", Author: "李四"},
+		{ID: 3, Title: "Docker实践", Content: "...", Author: "王五"},
+	}
+
+	printResponse("查询成功",
+		response.Page(articles, 156, 1, 10).WithRequestID("req-001"))
+
+	// 场景5: 更新用户信息
+	fmt.Println("\n>>> 场景5: 更新用户信息")
+	updatedUser := User{ID: 1, Username: "张三", Email: "new_email@example.com", Age: 26}
+
+	// 成功
+	printResponse("更新成功",
+		response.Data(updatedUser).WithMessage("用户信息更新成功"))
+
+	// 失败 - 权限不足
+	printResponse("更新失败 - 权限不足",
+		response.Forbidden("您只能修改自己的信息"))
+
+	// 场景6: 删除文章
+	fmt.Println("\n>>> 场景6: 删除文章")
+
+	// 成功
+	printResponse("删除成功", response.NoContent())
+
+	// 失败 - 文章不存在
+	printResponse("删除失败 - 文章不存在",
+		response.NotFound("文章不存在或已被删除"))
+
+	// 场景7: 支付订单
+	fmt.Println("\n>>> 场景7: 支付订单")
+	paymentResult := map[string]any{
+		"order_id": "ORD20240101001",
+		"amount":   99.99,
+		"status":   "paid",
+		"paid_at":  "2024-01-01T10:30:00Z",
+	}
+
+	// 成功
+	printResponse("支付成功",
+		response.Data(paymentResult).WithMessage("支付成功"))
+
+	// 失败 - 余额不足
+	printResponse("支付失败 - 余额不足",
+		response.BusinessError("账户余额不足，请先充值"))
+
+	// 失败 - 订单已支付
+	printResponse("支付失败 - 订单已支付",
+		response.BusinessError("该订单已支付，请勿重复操作"))
+
+	// 场景8: 文件上传
+	fmt.Println("\n>>> 场景8: 文件上传")
+	uploadResult := map[string]any{
+		"filename": "avatar.jpg",
+		"url":      "https://cdn.example.com/uploads/avatar.jpg",
+		"size":     1024000,
+	}
+
+	// 成功
+	printResponse("上传成功",
+		response.Created(uploadResult).WithMessage("文件上传成功"))
+
+	// 失败 - 文件太大
+	printResponse("上传失败 - 文件太大",
+		response.BadRequest("文件大小超过限制(最大10MB)"))
+
+	// 场景9: 批量操作
+	fmt.Println("\n>>> 场景9: 批量删除用户")
+	batchResult := map[string]any{
+		"total":      10,
+		"success":    8,
+		"failed":     2,
+		"failed_ids": []int{5, 9},
+	}
+
+	printResponse("批量操作结果",
+		response.Data(batchResult).WithMessage("批量删除完成"))
+
+	// 场景10: 系统错误
+	fmt.Println("\n>>> 场景10: 系统错误")
+
+	printResponse("数据库错误",
+		response.InternalError("数据库连接失败，请稍后重试"))
+
+	printResponse("服务降级",
+		response.ServiceUnavailable("系统维护中，预计10分钟后恢复"))
 }
 
-func TestThirdPartyErrorResponse(t *testing.T) {
-	fmt.Println("\n========== 第三方服务错误响应示例 ==========")
+// ========== 链式调用测试 ==========
 
-	// 1. 短信发送失败
-	resp := response.Fail(response.SMSError).
-		WithMessage("验证码发送失败，请检查手机号或稍后重试").
-		WithRequestID("req-501")
-	mockJSON(resp.HTTPStatus(), resp)
-
-	// 2. 邮件发送失败
-	resp = response.Fail(response.EmailError).WithRequestID("req-502")
-	mockJSON(resp.HTTPStatus(), resp)
-
-	// 3. 文件上传失败
-	resp = response.FailWithMsg(response.UploadFailed, "图片上传失败，请重试").
-		WithRequestID("req-503")
-	mockJSON(resp.HTTPStatus(), resp)
-
-	// 4. 支付服务异常
-	resp = response.Fail(response.PaymentError).WithRequestID("req-504")
-	mockJSON(resp.HTTPStatus(), resp)
-}
-
-func TestChainedCalls(t *testing.T) {
+func TestChainCalls(t *testing.T) {
 	fmt.Println("\n========== 链式调用示例 ==========")
 
-	// 1. 多个链式调用
-	resp := response.Fail(response.InvalidParam).
-		WithMessage("用户名长度必须在3-20个字符之间").
-		WithRequestID("req-601").
-		WithTimestamp()
-	mockJSON(resp.HTTPStatus(), resp)
+	user := User{ID: 1, Username: "张三", Email: "zhangsan@example.com"}
 
-	// 2. 成功响应的链式调用
-	userData := map[string]interface{}{
-		"id":       456,
-		"username": "bob",
+	// 完整链式调用
+	printResponse("完整链式调用",
+		response.Data(user).
+			WithMessage("用户查询成功").
+			WithRequestID("req-chain-001"))
+
+	// 动态链式调用
+	resp := response.Data(user)
+	if true { // 模拟条件
+		resp.WithMessage("VIP用户查询成功")
 	}
-	resp = response.OK(userData).
-		WithMessage("登录成功").
-		WithRequestID("req-602").
-		WithTimestamp()
-	mockJSON(resp.HTTPStatus(), resp)
-
-	// 3. 错误响应添加额外数据
-	resp = response.Fail(response.PasswordWeak).
-		WithMessage("密码强度不够").
-		WithData(map[string]interface{}{
-			"requirements": []string{
-				"至少8个字符",
-				"包含大小写字母",
-				"包含数字",
-				"包含特殊字符",
-			},
-		}).
-		WithRequestID("req-603")
-	mockJSON(resp.HTTPStatus(), resp)
+	resp.WithRequestID("req-dynamic-001")
+	printResponse("动态链式调用", resp)
 }
 
-func TestComplexScenarios(t *testing.T) {
-	fmt.Println("\n========== 复杂场景示例 ==========")
+// ========== 边界情况测试 ==========
 
-	// 1. 用户注册场景
-	fmt.Println("场景1: 用户注册")
-	resp := response.FailWithMsgAndData(
-		response.InvalidParam,
-		"注册失败，请检查以下信息",
-		map[string]interface{}{
-			"errors": []map[string]string{
-				{"field": "email", "message": "邮箱格式不正确"},
-				{"field": "password", "message": "密码强度不够"},
-			},
-		},
-	).WithRequestID("req-701")
-	mockJSON(resp.HTTPStatus(), resp)
+func TestEdgeCases(t *testing.T) {
+	fmt.Println("\n========== 边界情况测试 ==========")
 
-	// 2. 订单创建场景
-	fmt.Println("场景2: 订单创建失败")
-	resp = response.FailWithData(
-		response.InsufficientStock,
-		map[string]interface{}{
-			"product_id": "P12345",
-			"requested":  10,
-			"available":  3,
-			"message":    "该商品库存不足，当前仅剩3件",
-		},
-	).WithRequestID("req-702")
-	mockJSON(resp.HTTPStatus(), resp)
+	// nil 数据
+	printResponse("nil数据", response.Data(nil))
 
-	// 3. 批量操作场景
-	fmt.Println("场景3: 批量删除部分成功")
-	resp = response.OKWithMsg(
-		"批量删除完成，部分项目删除失败",
-		map[string]interface{}{
-			"total":   10,
-			"success": 7,
-			"failed":  3,
-			"failed_items": []map[string]interface{}{
-				{"id": 5, "reason": "权限不足"},
-				{"id": 8, "reason": "资源不存在"},
-				{"id": 9, "reason": "资源被占用"},
-			},
-		},
-	).WithRequestID("req-703")
-	mockJSON(resp.HTTPStatus(), resp)
+	// 空切片
+	printResponse("空切片", response.Data([]User{}))
+
+	// 空分页
+	printResponse("空分页", response.Page([]User{}, 0, 1, 10))
+
+	// 空消息
+	printResponse("空消息", response.BadRequest(""))
+
+	// 零值结构体
+	printResponse("零值结构体", response.Data(User{}))
 }
 
-// TestGinIntegration 模拟 Gin 框架集成
-func TestGinIntegration(t *testing.T) {
-	fmt.Println("\n========== Gin 框架集成示例 ==========")
+// ========== 性能测试 ==========
 
-	// 模拟 Gin 的 Context
-	type MockGinContext struct{}
-	c := &MockGinContext{}
+func BenchmarkDataResponse(b *testing.B) {
+	user := User{ID: 1, Username: "张三", Email: "zhangsan@example.com"}
 
-	// 模拟 c.JSON 方法
-	mockGinJSON := func(c *MockGinContext, resp *response.Response) {
-		mockJSON(resp.HTTPStatus(), resp)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = response.Data(user)
+	}
+}
+
+func BenchmarkPageResponse(b *testing.B) {
+	users := []User{
+		{ID: 1, Username: "张三", Email: "zhangsan@example.com"},
+		{ID: 2, Username: "李四", Email: "lisi@example.com"},
 	}
 
-	// 示例1: 获取用户信息
-	fmt.Println("GET /api/users/123")
-	user := map[string]interface{}{
-		"id":       123,
-		"username": "alice",
-		"email":    "alice@example.com",
-		"role":     "admin",
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = response.Page(users, 100, 1, 10)
 	}
-	mockGinJSON(c, response.OK(user).WithRequestID("req-801"))
+}
 
-	// 示例2: 创建用户（参数错误）
-	fmt.Println("POST /api/users")
-	mockGinJSON(c, response.InvalidParamWithField("email").WithRequestID("req-802"))
+func BenchmarkChainCalls(b *testing.B) {
+	user := User{ID: 1, Username: "张三", Email: "zhangsan@example.com"}
 
-	// 示例3: 更新用户（权限不足）
-	fmt.Println("PUT /api/users/456")
-	mockGinJSON(c, response.Fail(response.Forbidden).
-		WithMessage("只能修改自己的信息").
-		WithRequestID("req-803"))
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = response.Data(user).
+			WithMessage("查询成功").
+			WithRequestID("req-001")
+	}
+}
 
-	// 示例4: 删除用户（成功）
-	fmt.Println("DELETE /api/users/789")
-	mockGinJSON(c, response.OKWithNoContent().WithRequestID("req-804"))
+// ========== 运行所有测试 ==========
 
-	// 示例5: 登录（密码错误）
-	fmt.Println("POST /api/auth/login")
-	mockGinJSON(c, response.FailWithMsg(response.PasswordError, "密码错误，您还有2次尝试机会").
-		WithRequestID("req-805"))
-
-	// 示例6: 数据库错误（内部错误）
-	fmt.Println("GET /api/orders")
-	dbErr := errors.New("sql: connection refused")
-	mockGinJSON(c, response.FailWithError(response.DatabaseError, dbErr).
-		WithRequestID("req-806"))
+func TestAll(t *testing.T) {
+	TestSuccessResponses(t)
+	TestErrorResponses(t)
+	TestBusinessErrors(t)
+	TestRealWorldScenarios(t)
+	TestChainCalls(t)
+	TestEdgeCases(t)
 }
