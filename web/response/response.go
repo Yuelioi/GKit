@@ -197,8 +197,15 @@ func (r *Response) IsSuccess() bool {
 
 // ---------- Web框架适配 ----------
 
-// JSON Gin/Echo 通用适配
+// JSON 通用适配
 // Gin: c.JSON(resp.Status(), resp)
+func (r *Response) GJSON(c interface {
+	JSON(code int, i any)
+}) {
+	c.JSON(r.Status(), r)
+}
+
+// JSON 通用适配
 // Echo: c.JSON(resp.Status(), resp)
 func (r *Response) JSON(c interface {
 	JSON(code int, i any) error
