@@ -2,6 +2,7 @@ package gormzerolog
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -64,19 +65,31 @@ func (l *Logger) LogMode(level logger.LogLevel) logger.Interface {
 
 func (l *Logger) Info(ctx context.Context, msg string, data ...interface{}) {
 	if l.level >= logger.Info {
-		l.log.Info().Msgf(msg, data...)
+		if len(data) == 0 {
+			l.log.Info().Msg(msg)
+		} else {
+			l.log.Info().Msg(fmt.Sprint(msg, " ", fmt.Sprint(data...)))
+		}
 	}
 }
 
 func (l *Logger) Warn(ctx context.Context, msg string, data ...interface{}) {
 	if l.level >= logger.Warn {
-		l.log.Warn().Msgf(msg, data...)
+		if len(data) == 0 {
+			l.log.Warn().Msg(msg)
+		} else {
+			l.log.Warn().Msg(fmt.Sprint(msg, " ", fmt.Sprint(data...)))
+		}
 	}
 }
 
 func (l *Logger) Error(ctx context.Context, msg string, data ...interface{}) {
 	if l.level >= logger.Error {
-		l.log.Error().Msgf(msg, data...)
+		if len(data) == 0 {
+			l.log.Error().Msg(msg)
+		} else {
+			l.log.Error().Msg(fmt.Sprint(msg, " ", fmt.Sprint(data...)))
+		}
 	}
 }
 
