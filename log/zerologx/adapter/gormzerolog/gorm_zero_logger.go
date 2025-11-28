@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 	"gorm.io/gorm/logger"
 )
 
@@ -43,7 +44,7 @@ func WithZerolog(zl zerolog.Logger) Option {
 func New(opts ...Option) *Logger {
 	// 默认值
 	l := &Logger{
-		log:           zerolog.New(nil),       // 默认输出 nil（无输出）
+		log:           log.Logger,             // 默认使用全局Logger
 		level:         logger.Info,            // 默认 Info 级别
 		slowThreshold: 200 * time.Millisecond, // 默认 200ms
 	}
