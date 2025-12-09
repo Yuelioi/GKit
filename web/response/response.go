@@ -18,10 +18,10 @@ type Response struct {
 
 // PageData 分页数据
 type PageData struct {
-	List  any   `json:"list"`
-	Total int64 `json:"total"`
-	Page  int   `json:"page"`
-	Size  int   `json:"size"`
+	List     any   `json:"list"`
+	Total    int64 `json:"total"`
+	Page     int   `json:"page"`
+	PageSize int   `json:"pageSize"`
 }
 
 // ---------- 预定义业务码 ----------
@@ -75,12 +75,12 @@ func Data(data any) *Response {
 }
 
 // Page 分页响应
-func Page(list any, total int64, page, size int) *Response {
+func Page(list any, total int64, page, pageSize int) *Response {
 	return Data(PageData{
-		List:  list,
-		Total: total,
-		Page:  page,
-		Size:  size,
+		List:     list,
+		Total:    total,
+		Page:     page,
+		PageSize: pageSize,
 	})
 }
 
