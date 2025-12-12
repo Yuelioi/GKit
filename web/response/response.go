@@ -36,6 +36,7 @@ const (
 	CodeForbidden        = 40300 // 禁止访问
 	CodeNotFound         = 40400 // 资源不存在
 	CodeMethodNotAllowed = 40500 // 方法不允许
+	CodeConflict         = 40900 // 资源冲突
 	CodeTooManyRequests  = 42900 // 请求过多
 
 	// 服务端错误 5xxxx
@@ -89,6 +90,14 @@ func Created(data any) *Response {
 	return newResponse(CodeSuccess, "created", http.StatusCreated).WithData(data)
 }
 
+// Accepted 请求已接受 (202)
+func Accepted(data any) *Response {
+	if data == nil {
+		return newResponse(CodeSuccess, "accepted", http.StatusAccepted)
+	}
+	return newResponse(CodeSuccess, "accepted", http.StatusAccepted).WithData(data)
+}
+
 // NoContent 无内容响应 (204)
 func NoContent() *Response {
 	return newResponse(CodeSuccess, "no content", http.StatusNoContent)
@@ -133,6 +142,30 @@ func NotFound(message string) *Response {
 	return newResponse(CodeNotFound, message, http.StatusNotFound)
 }
 
+// MethodNotAllowed 方法不允许 (405)
+func MethodNotAllowed(message string) *Response {
+	if message == "" {
+		message = "method not allowed"
+	}
+	return newResponse(CodeMethodNotAllowed, message, http.StatusMethodNotAllowed)
+}
+
+// Conflict 资源冲突 (409)
+func Conflict(message string) *Response {
+	if message == "" {
+		message = "conflict"
+	}
+	return newResponse(CodeConflict, message, http.StatusConflict)
+}
+
+// TooManyRequests 请求过于频繁 (429)
+func TooManyRequests(message string) *Response {
+	if message == "" {
+		message = "too many requests"
+	}
+	return newResponse(CodeTooManyRequests, message, http.StatusTooManyRequests)
+}
+
 // InternalError 服务器内部错误 (500)
 func InternalError(message string) *Response {
 	if message == "" {
@@ -147,6 +180,14 @@ func ServiceUnavailable(message string) *Response {
 		message = "service unavailable"
 	}
 	return newResponse(CodeServiceUnavailable, message, http.StatusServiceUnavailable)
+}
+
+// GatewayTimeout 网关超时 (504)
+func GatewayTimeout(message string) *Response {
+	if message == "" {
+		message = "gateway timeout"
+	}
+	return newResponse(CodeGatewayTimeout, message, http.StatusGatewayTimeout)
 }
 
 // Custom 自定义响应
