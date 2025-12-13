@@ -5,9 +5,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/rs/zerolog"
 )
 
-type requestIDKey string
+type requestIDKey = string
 
 const key requestIDKey = "request_id"
 
@@ -23,7 +24,8 @@ func RequestIDMiddleware() gin.HandlerFunc {
 		}
 
 		// 将 request_id 注入到 zerolog context
-		ctx := context.WithValue(c.Request.Context(), key, rid)
+		logger := zerolog.Ctx(c.Request.Context()).With().Str(key, rid).Logger()
+		ctx := logger.WithContext(c.Request.Context())
 
 		c.Request = c.Request.WithContext(ctx)
 
