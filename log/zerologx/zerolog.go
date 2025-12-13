@@ -1,6 +1,7 @@
 package zerologx
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"strings"
@@ -80,6 +81,19 @@ func (b *LoggerBuilder) Build() zerolog.Logger {
 				return fmt.Sprintf("[%s]", strings.ToUpper(ll))
 			}
 			return fmt.Sprintf("[%s]", i)
+		}
+
+		cw.FormatExtra = func(m map[string]interface{}, buf *bytes.Buffer) error {
+			// request_id 放第一个
+			if rid, ok := m["request_id"]; ok {
+				fmt.Fprintf(buf, " request_id=%v", rid)
+				delete(m, "request_id")
+			}
+			// 其他字段按原顺序
+			for k, v := range m {
+				fmt.Fprintf(buf, " %s=%v", k, v)
+			}
+			return nil
 		}
 
 		logger = zerolog.New(cw).With().Timestamp().Logger()
