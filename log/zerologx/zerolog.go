@@ -1,7 +1,6 @@
 package zerologx
 
 import (
-	"bytes"
 	"fmt"
 	"os"
 	"strings"
@@ -53,7 +52,6 @@ func (b *LoggerBuilder) Output(f *os.File) *LoggerBuilder {
 
 func (b *LoggerBuilder) Build() zerolog.Logger {
 	var logger zerolog.Logger
-
 	isConsole := b.output == os.Stdout || b.output == os.Stderr
 
 	if isConsole {
@@ -62,11 +60,6 @@ func (b *LoggerBuilder) Build() zerolog.Logger {
 			Out:        b.output,
 			TimeFormat: "2006-01-02 15:04:05",
 			NoColor:    b.noColor,
-			PartsExclude: []string{
-				zerolog.LevelFieldName,
-				zerolog.TimestampFieldName,
-				zerolog.MessageFieldName,
-			},
 		}
 
 		colors := map[string]string{
@@ -88,19 +81,7 @@ func (b *LoggerBuilder) Build() zerolog.Logger {
 			return fmt.Sprintf("[%s]", i)
 		}
 
-		cw.FormatExtra = func(m map[string]interface{}, buf *bytes.Buffer) error {
-			// request_id 放第一个
-			if rid, ok := m["request_id"]; ok {
-				fmt.Fprintf(buf, " request_id=%v", rid)
-				delete(m, "request_id")
-			}
-			// 其他字段按原顺序
-			for k, v := range m {
-				fmt.Fprintf(buf, " %s=%v", k, v)
-			}
-			return nil
-		}
-
+		// 直接使用 ConsoleWriter，不要再包装
 		logger = zerolog.New(cw).With().Timestamp().Logger()
 	} else {
 		// 文件或其他 io.Writer，使用 JSON 格式
