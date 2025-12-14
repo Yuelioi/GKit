@@ -62,6 +62,11 @@ func (b *LoggerBuilder) Build() zerolog.Logger {
 			Out:        b.output,
 			TimeFormat: "2006-01-02 15:04:05",
 			NoColor:    b.noColor,
+			PartsExclude: []string{
+				zerolog.LevelFieldName,
+				zerolog.TimestampFieldName,
+				zerolog.MessageFieldName,
+			},
 		}
 
 		colors := map[string]string{
