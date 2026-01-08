@@ -81,7 +81,6 @@ func (b *LoggerBuilder) Build() zerolog.Logger {
 			return fmt.Sprintf("[%s]", i)
 		}
 
-		// 直接使用 ConsoleWriter，不要再包装
 		logger = zerolog.New(cw).With().Timestamp().Logger()
 	} else {
 		// 文件或其他 io.Writer，使用 JSON 格式
