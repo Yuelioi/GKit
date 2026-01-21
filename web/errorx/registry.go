@@ -1,54 +1,60 @@
 package errorx
 
-import "fmt"
+import (
+	"fmt"
+	"sync"
+)
 
-// ============ 错误码注册表（核心机制） ============
+var (
+	mu    sync.RWMutex
+	specs = make(map[int]CodeSpec)
+)
 
-// CodeRegistry 错误码注册表
-// 每个应用可以注册自己的错误码，支持动态查询和验证
-type CodeRegistry struct {
-	codes map[int]CodeSpec
-}
-
-// CodeSpec 错误码规范
-type CodeSpec struct {
-	Code       int
-	Message    string
-	HttpStatus int
-	Desc       string // 描述，用于文档生成
-	Retriable  bool   // 是否可重试
-}
-
-var globalRegistry = &CodeRegistry{
-	codes: make(map[int]CodeSpec),
-}
-
-// Register 注册错误码
-func Register(spec CodeSpec) {
-	if _, exists := globalRegistry.codes[spec.Code]; exists {
-		panic(fmt.Sprintf("error code %d already registered", spec.Code))
+func Register(spec CodeSpec) error {
+	if spec.Code < 0 {
+		return fmt.Errorf("invalid code %d", spec.Code)
 	}
-	globalRegistry.codes[spec.Code] = spec
+	if spec.MessageKey == "" {
+		return fmt.Errorf("message key required for code %d", spec.Code)
+	}
+	if spec.HttpStatus < 100 || spec.HttpStatus >= 600 {
+		return fmt.Errorf("invalid http status %d", spec.HttpStatus)
+	}
+	if spec.Version == "" {
+		return fmt.Errorf("version required for code %d", spec.Code)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+
+	if old, ok := specs[spec.Code]; ok {
+		if old == spec {
+			return nil
+		}
+		return fmt.Errorf("code %d already registered", spec.Code)
+	}
+
+	specs[spec.Code] = spec
+	return nil
 }
 
-// RegisterBatch 批量注册错误码
-func RegisterBatch(specs []CodeSpec) {
-	for _, spec := range specs {
-		Register(spec)
+func RegisterMust(spec CodeSpec) {
+	if err := Register(spec); err != nil {
+		panic(err)
 	}
 }
 
-// GetSpec 获取错误码规范（用于文档生成、验证等）
 func GetSpec(code int) (CodeSpec, bool) {
-	spec, ok := globalRegistry.codes[code]
+	mu.RLock()
+	defer mu.RUnlock()
+	spec, ok := specs[code]
 	return spec, ok
 }
 
-// ListSpecs 列出所有错误码（用于文档生成）
-func ListSpecs() []CodeSpec {
-	specs := make([]CodeSpec, 0, len(globalRegistry.codes))
-	for _, spec := range globalRegistry.codes {
-		specs = append(specs, spec)
+func GetSpecMust(code int) CodeSpec {
+	spec, ok := GetSpec(code)
+	if !ok {
+		panic(fmt.Sprintf("error code %d not registered", code))
 	}
-	return specs
+	return spec
 }

@@ -1,55 +1,35 @@
 package errorx
 
-import "net/http"
+type Code interface {
+	error
+	Code() int
+	MessageKey() string
+	HttpStatus() int
+	Version() string
+	IsRetriable() bool
+	Cause() error
+}
 
-const (
-	CodeOK = 0
+type codeErr struct {
+	spec  CodeSpec
+	cause error
+}
 
-	// 4xxxx - 标准 HTTP 错误
-	CodeInvalidParams = 40000
-	CodeUnauthorized  = 40100
-	CodeForbidden     = 40300
-	CodeNotFound      = 40400
+func (e *codeErr) Error() string      { return e.spec.MessageKey }
+func (e *codeErr) Code() int          { return e.spec.Code }
+func (e *codeErr) MessageKey() string { return e.spec.MessageKey }
+func (e *codeErr) HttpStatus() int    { return e.spec.HttpStatus }
+func (e *codeErr) Version() string    { return e.spec.Version }
+func (e *codeErr) IsRetriable() bool  { return e.spec.Retriable }
+func (e *codeErr) Cause() error       { return e.cause }
 
-	// 5xxxx - 标准 HTTP 错误
-	CodeInternal    = 50000
-	CodeUnavailable = 50300
-)
+func New(spec CodeSpec) Code {
+	return &codeErr{spec: spec}
+}
 
-var (
-	InvalidParams = &codeErr{
-		code:       CodeInvalidParams,
-		message:    "invalid parameters",
-		httpStatus: http.StatusBadRequest,
+func Wrap(c Code, cause error) Code {
+	return &codeErr{
+		spec:  GetSpecMust(c.Code()),
+		cause: cause,
 	}
-
-	Unauthorized = &codeErr{
-		code:       CodeUnauthorized,
-		message:    "unauthorized",
-		httpStatus: http.StatusUnauthorized,
-	}
-
-	Forbidden = &codeErr{
-		code:       CodeForbidden,
-		message:    "forbidden",
-		httpStatus: http.StatusForbidden,
-	}
-
-	NotFound = &codeErr{
-		code:       CodeNotFound,
-		message:    "not found",
-		httpStatus: http.StatusNotFound,
-	}
-
-	Internal = &codeErr{
-		code:       CodeInternal,
-		message:    "internal server error",
-		httpStatus: http.StatusInternalServerError,
-	}
-
-	Unavailable = &codeErr{
-		code:       CodeUnavailable,
-		message:    "service unavailable",
-		httpStatus: http.StatusServiceUnavailable,
-	}
-)
+}
