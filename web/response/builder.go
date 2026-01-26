@@ -23,12 +23,12 @@ func Error(err error) *Response {
 	}
 
 	// 如果是自定义错误，使用错误信息
-	if e, ok := err.(errorx.Error); ok {
+	if e, ok := err.(*errorx.Error); ok {
 		return &Response{
 			Code:       e.Code(),
 			Message:    e.Message(),
 			Timestamp:  time.Now().UnixMilli(),
-			httpStatus: e.HttpStatus(),
+			httpStatus: e.StatusCode(),
 		}
 	}
 
@@ -37,7 +37,7 @@ func Error(err error) *Response {
 		Code:       errorx.Internal.Code(),
 		Message:    errorx.Internal.Message(),
 		Timestamp:  time.Now().UnixMilli(),
-		httpStatus: errorx.Internal.HttpStatus(),
+		httpStatus: errorx.Internal.StatusCode(),
 	}
 }
 
