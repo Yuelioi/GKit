@@ -57,13 +57,10 @@ func Cause(err error) error {
 
 // Wrap 用指定的 Error 包装一个错误
 func Wrap(baseErr *Error, cause error) *Error {
-	return baseErr.With(WithCause(cause))
+	return baseErr.WithCause(cause)
 }
 
 // WrapWithMessage 用指定的 Error 和自定义信息包装一个错误
 func WrapWithMessage(baseErr *Error, message string, cause error) *Error {
-	return baseErr.With(
-		WithMessage(message),
-		WithCause(cause),
-	)
+	return baseErr.WithMessage(message).WithCause(cause)
 }

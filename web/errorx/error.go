@@ -49,24 +49,23 @@ func NewRetriable(code int, message string, httpStatus int) *Error {
 	}
 }
 
-// ============ Option 模式 ============
-
-type Option func(*Error)
-
-// WithMessage 修改错误信息
-func WithMessage(message string) Option {
-	return func(e *Error) { e.message = message }
-}
-
-// WithCause 设置底层错误
-func WithCause(cause error) Option {
-	return func(e *Error) { e.cause = cause }
-}
-
-// With 应用多个选项
-func (e *Error) With(opts ...Option) *Error {
-	for _, opt := range opts {
-		opt(e)
+func (e *Error) WithMessage(message string) *Error {
+	return &Error{
+		code:       e.code,
+		message:    message,
+		httpStatus: e.httpStatus,
+		retriable:  e.retriable,
+		cause:      e.cause,
 	}
-	return e
+}
+
+// WithCause 返回设置了底层错误的新错误
+func (e *Error) WithCause(cause error) *Error {
+	return &Error{
+		code:       e.code,
+		message:    e.message,
+		httpStatus: e.httpStatus,
+		retriable:  e.retriable,
+		cause:      cause,
+	}
 }
