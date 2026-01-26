@@ -1,35 +1,56 @@
 package errorx
 
-type Code interface {
+// Error 统一错误接口
+type Error interface {
 	error
 	Code() int
-	MessageKey() string
+	Message() string
 	HttpStatus() int
-	Version() string
 	IsRetriable() bool
 	Cause() error
+	WithCause(error) Error
 }
 
-type codeErr struct {
-	spec  CodeSpec
-	cause error
+type customError struct {
+	code       int
+	message    string
+	httpStatus int
+	retriable  bool
+	cause      error
 }
 
-func (e *codeErr) Error() string      { return e.spec.MessageKey }
-func (e *codeErr) Code() int          { return e.spec.Code }
-func (e *codeErr) MessageKey() string { return e.spec.MessageKey }
-func (e *codeErr) HttpStatus() int    { return e.spec.HttpStatus }
-func (e *codeErr) Version() string    { return e.spec.Version }
-func (e *codeErr) IsRetriable() bool  { return e.spec.Retriable }
-func (e *codeErr) Cause() error       { return e.cause }
+func (e *customError) Error() string     { return e.message }
+func (e *customError) Code() int         { return e.code }
+func (e *customError) Message() string   { return e.message }
+func (e *customError) HttpStatus() int   { return e.httpStatus }
+func (e *customError) IsRetriable() bool { return e.retriable }
+func (e *customError) Cause() error      { return e.cause }
 
-func New(spec CodeSpec) Code {
-	return &codeErr{spec: spec}
+func (e *customError) WithCause(cause error) Error {
+	return &customError{
+		code:       e.code,
+		message:    e.message,
+		httpStatus: e.httpStatus,
+		retriable:  e.retriable,
+		cause:      cause,
+	}
 }
 
-func Wrap(c Code, cause error) Code {
-	return &codeErr{
-		spec:  GetSpecMust(c.Code()),
-		cause: cause,
+// New 创建新错误
+func New(code int, message string, httpStatus int) Error {
+	return &customError{
+		code:       code,
+		message:    message,
+		httpStatus: httpStatus,
+	}
+}
+
+// NewRetriable 创建可重试的错误
+func NewRetriable(code int, message string, httpStatus int) Error {
+	return &customError{
+		code:       code,
+		message:    message,
+		httpStatus: httpStatus,
+		retriable:  true,
 	}
 }

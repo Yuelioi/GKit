@@ -1,14 +1,29 @@
 package errorx
 
-func Is(err error, target Code) bool {
-	e, ok1 := err.(Code)
-	t, ok2 := target.(Code)
-	return ok1 && ok2 && e.Code() == t.Code()
+// ============ 错误判断 ============
+
+func Is(err error, target Error) bool {
+	e, ok := err.(Error)
+	return ok && e.Code() == target.Code()
 }
 
+// Cause 递归获取最底层的原始错误
 func Cause(err error) error {
-	if c, ok := err.(Code); ok {
-		return c.Cause()
+	for {
+		if e, ok := err.(Error); ok {
+			if cause := e.Cause(); cause != nil {
+				err = cause
+				continue
+			}
+		}
+		return err
 	}
-	return err
+}
+
+// IsRetriable 判断是否可重试
+func IsRetriable(err error) bool {
+	if e, ok := err.(Error); ok {
+		return e.IsRetriable()
+	}
+	return false
 }

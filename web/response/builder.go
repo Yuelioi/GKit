@@ -4,42 +4,75 @@ import (
 	"time"
 
 	"github.com/Yuelioi/gkit/web/errorx"
-	"github.com/Yuelioi/gkit/web/i18n"
 )
 
-const APIVersion = "v1"
-
-func OK(locale i18n.Locale) *Response {
-	return FromCode(errorx.CodeOK, locale)
+func Success(data interface{}) *Response {
+	return &Response{
+		Code:       0,
+		Message:    "Success",
+		Data:       data,
+		Timestamp:  time.Now().UnixMilli(),
+		httpStatus: 200,
+	}
 }
 
-func FromError(err error, locale i18n.Locale) *Response {
+// Error 错误响应
+func Error(err error) *Response {
 	if err == nil {
-		return OK(locale)
+		return Success(nil)
 	}
 
-	if c, ok := err.(errorx.Code); ok {
-		return FromCode(c.Code(), locale)
-	}
-
-	return FromCode(errorx.CodeInternal, locale)
-}
-
-func FromCode(code int, locale i18n.Locale) *Response {
-	spec, ok := errorx.GetSpec(code)
-	if !ok {
-		spec = errorx.CodeSpec{
-			Code:       code,
-			MessageKey: "error.internal",
-			HttpStatus: 500,
+	// 如果是自定义错误，使用错误信息
+	if e, ok := err.(errorx.Error); ok {
+		return &Response{
+			Code:       e.Code(),
+			Message:    e.Message(),
+			Timestamp:  time.Now().UnixMilli(),
+			httpStatus: e.HttpStatus(),
 		}
 	}
 
+	// 其他错误当作内部错误处理
 	return &Response{
-		Code:       spec.Code,
-		Message:    i18n.Translate(i18n.Key(spec.MessageKey), locale),
+		Code:       errorx.Internal.Code(),
+		Message:    errorx.Internal.Message(),
 		Timestamp:  time.Now().UnixMilli(),
-		Version:    APIVersion,
-		httpStatus: spec.HttpStatus,
+		httpStatus: errorx.Internal.HttpStatus(),
 	}
+}
+
+// ============ Builder 链式调用 ============
+
+func (r *Response) WithData(data interface{}) *Response {
+	r.Data = data
+	return r
+}
+
+func (r *Response) WithMessage(msg string) *Response {
+	r.Message = msg
+	return r
+}
+
+func (r *Response) WithTraceID(traceID string) *Response {
+	r.TraceID = traceID
+	return r
+}
+
+func (r *Response) WithCode(code int) *Response {
+	r.Code = code
+	return r
+}
+
+func (r *Response) WithStatus(status int) *Response {
+	r.httpStatus = status
+	return r
+}
+
+// ============ 获取 HTTP 状态码 ============
+
+func (r *Response) Status() int {
+	if r.httpStatus > 0 {
+		return r.httpStatus
+	}
+	return 200
 }
