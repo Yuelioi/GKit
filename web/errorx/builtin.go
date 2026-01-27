@@ -13,7 +13,7 @@ var (
 	// ======================
 
 	// 400 Bad Request
-	BadRequest    = New(400001, "Invalid Parameters", http.StatusBadRequest)
+	InvalidParams = New(400001, "Invalid Parameters", http.StatusBadRequest)
 	MissingParams = New(400002, "Missing Required Parameters", http.StatusBadRequest)
 	InvalidFormat = New(400003, "Invalid Data Format", http.StatusBadRequest)
 
